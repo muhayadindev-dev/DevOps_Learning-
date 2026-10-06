@@ -13,7 +13,7 @@ fi
 # Create a timestamped backup directory.
 timestamp=$(date +%Y-%m-%d_%H-%M-%S)
 backup_dir="backup_$timestamp"
-mkdir "$backup_dir" || exit 1
+mkdir -p "$backup_dir"
 
 echo "Backup directory created: $backup_dir"
 echo "Copying .txt files..."
@@ -22,4 +22,4 @@ echo "Copying .txt files..."
 cp "$source"/*.txt "$backup_dir" 2>/dev/null
 count=$(find "$backup_dir" -maxdepth 1 -type f -name "*.txt" | wc -l)
 
-echo "Files backed up: $count"
+echo "Backup complete! Files backed up: $count"
