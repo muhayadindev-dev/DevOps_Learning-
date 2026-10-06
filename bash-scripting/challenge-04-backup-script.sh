@@ -1,7 +1,5 @@
 #!/bin/bash
 
-# Backs up .txt files from a chosen directory into a timestamped backup directory.
-
 # Ask the user for the source directory.
 echo "Enter source directory:"
 read source

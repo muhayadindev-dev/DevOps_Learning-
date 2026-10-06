@@ -1,7 +1,5 @@
 #!/bin/bash
 
-# Checks that a file exists, then reports its read, write and execute permissions.
-
 # Ask the user which file they want to check.
 echo "Enter filename to check:"
 read file

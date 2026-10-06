@@ -19,8 +19,6 @@ It checks whether the second number is `0` before division so the invalid operat
 ```bash
 #!/bin/bash
 
-# Simple calculator that takes two numbers and runs the four basic arithmetic operations.
-
 # Ask the user for two numbers.
 echo "Enter first number:"
 read number1
@@ -89,8 +87,6 @@ The full sequence is handled by the script rather than relying on the directory 
 ```bash
 #!/bin/bash
 
-# Automates creating a directory and file, writing the date and displaying the result.
-
 # Create the demo directory and move into it.
 mkdir -p bash_demo
 cd bash_demo || exit 1
@@ -144,8 +140,6 @@ The permission checks are kept separate because a file can satisfy more than one
 
 ```bash
 #!/bin/bash
-
-# Checks that a file exists, then reports its read, write and execute permissions.
 
 # Ask the user which file they want to check.
 echo "Enter filename to check:"
@@ -217,8 +211,6 @@ This script takes a source directory, validates that it exists, creates a timest
 
 ```bash
 #!/bin/bash
-
-# Backs up .txt files from a chosen directory into a timestamped backup directory.
 
 # Ask the user for the source directory.
 echo "Enter source directory:"

@@ -1,7 +1,5 @@
 #!/bin/bash
 
-# Automates creating a directory and file, writing the date and displaying the result.
-
 # Create the demo directory and move into it.
 mkdir -p bash_demo
 cd bash_demo || exit 1

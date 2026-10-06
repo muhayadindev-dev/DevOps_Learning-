@@ -1,7 +1,5 @@
 #!/bin/bash
 
-# Simple calculator that takes two numbers and runs the four basic arithmetic operations.
-
 # Ask the user for two numbers.
 echo "Enter first number:"
 read number1
