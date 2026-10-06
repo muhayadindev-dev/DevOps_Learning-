@@ -151,8 +151,6 @@ if [[ ! -f "$file" ]]; then
     exit 1
 fi
 
-echo "File $file exists."
-
 # Check each permission separately.
 if [[ -r "$file" ]]; then
     echo "File is readable"
@@ -225,7 +223,7 @@ fi
 # Create a timestamped backup directory.
 timestamp=$(date +%Y-%m-%d_%H-%M-%S)
 backup_dir="backup_$timestamp"
-mkdir -p "$backup_dir"
+mkdir "$backup_dir" || exit 1
 
 echo "Backup directory created: $backup_dir"
 echo "Copying .txt files..."
@@ -234,7 +232,7 @@ echo "Copying .txt files..."
 cp "$source"/*.txt "$backup_dir" 2>/dev/null
 count=$(find "$backup_dir" -maxdepth 1 -type f -name "*.txt" | wc -l)
 
-echo "Backup complete! Files backed up: $count"
+echo "Files backed up: $count"
 ```
 
 ### Learning Notes
@@ -245,7 +243,7 @@ echo "Backup complete! Files backed up: $count"
 
 - **Command substitution and variables**
   - `$(date +%Y-%m-%d_%H-%M-%S)` creates a timestamp that can be stored and reused.
-  - Building `backup_dir` from that value gives each backup its own directory name.
+  - The timestamp becomes part of `backup_dir`, giving the backup a time-based directory name.
 
 - **Quoting and globbing**
   - In `"$source"/*.txt`, the directory variable is quoted so its value stays intact.
@@ -258,6 +256,7 @@ echo "Backup complete! Files backed up: $count"
 ### Notes to Keep in Mind
 
 - Validate the source before creating or copying anything.
+- `mkdir "$backup_dir" || exit 1` stops the script rather than reusing an existing backup directory if the generated name already exists.
 - `2>/dev/null` suppresses the expected `cp` error when there are no matching `.txt` files; it should not be used blindly to hide useful errors.
 - Count the resulting backup state rather than assuming the intended operation completed successfully.
 

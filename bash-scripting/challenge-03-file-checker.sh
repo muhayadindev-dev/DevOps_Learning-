@@ -10,8 +10,6 @@ if [[ ! -f "$file" ]]; then
     exit 1
 fi
 
-echo "File $file exists."
-
 # Check each permission separately.
 if [[ -r "$file" ]]; then
     echo "File is readable"
