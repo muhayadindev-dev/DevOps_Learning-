@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>About | Elmi's DevOps Lab</title><link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"></head>
+<body>
+  <header class="topbar"><nav class="nav wrap" aria-label="Main navigation"><a class="brand" href="/"><span class="brand-mark">E</span> Elmi's DevOps Lab</a><div class="navlinks"><a href="/">Home</a><a href="/stats">Statistics</a><a class="active" href="/about">About</a></div><span class="tag">● Project online</span></nav></header>
+  <main class="wrap"><div class="page-head"><div class="eyebrow">CoderCo · Containers and Docker</div><h1>Behind the project.</h1><p>A small application built to practise the parts of containerisation that matter: packaging software, connecting services, keeping data, and distributing requests.</p></div>
+    <article class="panel copy"><h2>What happens when you click?</h2><ol class="steps"><li>Your browser sends a request to NGINX on your Mac's exposed port.</li><li>NGINX forwards the request to a Flask container listening internally on port 5000.</li><li>Flask selects an emoji and writes the new count, emoji total, and anonymous browser score to Redis.</li><li>The application returns the new count and Flask container hostname. The browser displays both.</li></ol>
+      <h2>Why three Flask containers?</h2><p>Docker Compose runs three copies of the same Flask image. They each have their own container identity but share one Redis instance. Different container IDs between clicks demonstrate that requests reached different replicas.</p>
+      <h2>What is stored?</h2><p>Redis stores the total counter, emoji totals, and scores under randomly generated browser IDs. The leaderboard is a demo: it does not know a person's real name or reliably identify a person across devices.</p>
+      <h2>Persistence</h2><p>The Compose configuration attaches a named volume to Redis. That keeps its saved data when the Redis container is recreated, provided the volume is retained.</p>
+      <div class="actions"><a href="/" class="btn btn-primary">Try the counter →</a><a href="/stats" class="btn btn-secondary">View statistics</a></div>
+    </article>
+  </main>
+  <footer class="footer">Built by Muhyadin Elmi · CoderCo Docker Challenge</footer>
+</body>
+</html>
