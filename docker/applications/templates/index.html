@@ -1,190 +1,92 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Docker Visit Counter | Muhyadin Elmi</title>
-
-  <style>
-    * {
-      box-sizing: border-box;
-    }
-
-    body {
-      margin: 0;
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
-      background: #0b1120;
-      color: #f8fafc;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    }
-
-    .card {
-      width: 100%;
-      max-width: 620px;
-      padding: 42px;
-      background: #151e30;
-      border: 1px solid #2b3850;
-      border-radius: 20px;
-      box-shadow: 0 20px 70px rgba(0, 0, 0, 0.2);
-    }
-
-    .label {
-      color: #5eead4;
-      text-transform: uppercase;
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 2px;
-    }
-
-    h1 {
-      margin: 18px 0;
-      font-size: 38px;
-      letter-spacing: -1.5px;
-    }
-
-    p {
-      color: #a9b7cc;
-      line-height: 1.7;
-    }
-
-    .counter {
-      margin: 30px 0 8px;
-      color: #5eead4;
-      font-size: 84px;
-      font-weight: 800;
-      font-variant-numeric: tabular-nums;
-    }
-
-    button {
-      margin-top: 20px;
-      padding: 15px 24px;
-      background: #5eead4;
-      color: #08211e;
-      font-size: 14px;
-      font-weight: 700;
-      border: none;
-      border-radius: 10px;
-      cursor: pointer;
-    }
-
-    button:hover {
-      background: #99f6e4;
-    }
-
-    button:disabled {
-      opacity: 0.5;
-      cursor: wait;
-    }
-
-    .details {
-      margin-top: 35px;
-      padding-top: 20px;
-      border-top: 1px solid #2b3850;
-      font-size: 13px;
-    }
-
-    .details p {
-      overflow-wrap: anywhere;
-    }
-
-    .footer {
-      margin-top: 30px;
-      font-size: 12px;
-      color: #64748b;
-    }
-
-    @media (max-width: 600px) {
-      .card {
-        padding: 25px;
-      }
-
-      h1 {
-        font-size: 30px;
-      }
-
-      .counter {
-        font-size: 68px;
-      }
-    }
-  </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Elmi's DevOps Lab | Docker Counter</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-
 <body>
-  <main class="card">
+  <header class="topbar"><nav class="nav wrap" aria-label="Main navigation">
+    <a class="brand" href="/"><span class="brand-mark">E</span> Elmi's DevOps Lab</a>
+    <div class="navlinks"><a class="active" href="/">Home</a><a href="/stats">Statistics</a><a href="/about">About</a></div>
+    <span class="tag">● Project online</span>
+  </nav></header>
 
-    <div class="label">CoderCo · Docker Challenge</div>
-
-    <h1>Docker Visit Counter</h1>
-
-    <p>
-      A multi-container application built with Python Flask,
-      Redis, Docker Compose and NGINX load balancing.
-    </p>
-
-    <div class="counter" id="counter">—</div>
-
-    <p>Total recorded visits</p>
-
-    <button id="visitButton" onclick="recordVisit()">
-      Record a Visit →
-    </button>
-
-    <section class="details">
-      <p id="container">Container: Waiting for request</p>
-      <p id="status">Status: Ready</p>
+  <main class="wrap">
+    <section class="hero">
+      <div>
+        <div class="eyebrow">Docker · Flask · Redis · NGINX</div>
+        <h1>Every click<br><em>tells a story.</em></h1>
+        <p>A small interactive project showing how containers communicate. Every click records an event in Redis, displays a new reaction, and reveals which Flask replica handled the request.</p>
+        <div class="actions"><button class="btn btn-primary" id="clickButton">Record a click →</button><a class="btn btn-secondary" href="/about">How it works</a></div>
+        <p class="fine">No login. No real names. An anonymous browser ID is used for the demo leaderboard.</p>
+      </div>
+      <section class="panel" aria-label="Live counter">
+        <div class="panel-title">Total recorded requests</div>
+        <div class="counter" id="total" aria-live="polite">—</div>
+        <div class="fine">One Redis counter shared by the Flask replicas.</div>
+        <div class="divider"></div>
+        <div class="panel-title">Latest reaction</div>
+        <div class="result" style="margin-top:13px"><div class="reaction" id="emoji" aria-live="polite">✨</div><div><strong id="reactionLabel">Ready when you are</strong><span>Your click gets a random reaction from the collection.</span></div></div>
+        <div class="divider"></div>
+        <div class="fine">Request served by Flask container</div>
+        <div class="container-id" id="container">Waiting for first click</div>
+        <p class="message" id="message" role="status">Ready.</p>
+      </section>
     </section>
 
-    <div class="footer">
-      Built by Muhyadin Elmi · DevOps Learning Journey
-    </div>
-
+    <section class="strip" aria-label="Architecture summary">
+      <article class="feature"><div class="feature-icon">↗</div><b>NGINX</b><p>Receives the browser request and forwards it to an available Flask replica.</p></article>
+      <article class="feature"><div class="feature-icon">▣</div><b>Three Flask replicas</b><p>Separate containers run the same application and handle incoming requests.</p></article>
+      <article class="feature"><div class="feature-icon">◈</div><b>Redis</b><p>Stores the shared count, emoji totals and anonymous leaderboard.</p></article>
+    </section>
   </main>
+  <footer class="footer">Built by Muhyadin Elmi · CoderCo Docker Challenge</footer>
 
   <script>
-    async function recordVisit() {
-      const button = document.getElementById("visitButton");
-      const status = document.getElementById("status");
-
-      button.disabled = true;
-      status.textContent = "Status: Sending request...";
-
-      try {
-        const response = await fetch("/count");
-
-        if (!response.ok) {
-          throw new Error("HTTP " + response.status);
-        }
-
-        const result = await response.text();
-
-        const match = result.match(
-          /^Visit count:\s*(\d+)\s*\|\s*Container:\s*(.+)$/
-        );
-
-        if (!match) {
-          throw new Error("Unexpected response");
-        }
-
-        document.getElementById("counter").textContent = match[1];
-
-        document.getElementById("container").textContent =
-          "Container: " + match[2];
-
-        status.textContent = "Status: Request successful";
-
-      } catch (error) {
-        status.textContent = "Status: " + error.message;
-
-      } finally {
-        button.disabled = false;
+    const button = document.getElementById('clickButton');
+    const message = document.getElementById('message');
+    function getGuestId() {
+      let id = localStorage.getItem('elmi_guest_id');
+      if (!id || !/^[a-f0-9]{12}$/.test(id)) {
+        const bytes = new Uint8Array(6);
+        crypto.getRandomValues(bytes);
+        id = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+        localStorage.setItem('elmi_guest_id', id);
       }
+      return id;
     }
+    async function loadTotal() {
+      try {
+        const response = await fetch('/api/stats');
+        if (!response.ok) throw new Error('Statistics unavailable');
+        const data = await response.json();
+        document.getElementById('total').textContent = data.total;
+      } catch (_) { message.textContent = 'Click to connect to the application.'; }
+    }
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      message.classList.remove('error');
+      message.textContent = 'Sending request…';
+      try {
+        const response = await fetch('/api/click', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({guest_id: getGuestId()})
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+        document.getElementById('total').textContent = data.total;
+        document.getElementById('emoji').textContent = data.reaction.emoji;
+        document.getElementById('reactionLabel').textContent = data.reaction.label;
+        document.getElementById('container').textContent = data.container;
+        message.textContent = `Recorded. You've clicked ${data.your_clicks} time${data.your_clicks === 1 ? '' : 's'} in this browser.`;
+      } catch (error) {
+        message.classList.add('error');
+        message.textContent = `Request failed: ${error.message}`;
+      } finally { button.disabled = false; }
+    });
+    loadTotal();
   </script>
-
 </body>
 </html>
