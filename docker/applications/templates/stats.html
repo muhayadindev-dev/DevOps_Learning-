@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Statistics | Elmi's DevOps Lab</title><link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"></head>
+<body>
+  <header class="topbar"><nav class="nav wrap" aria-label="Main navigation"><a class="brand" href="/"><span class="brand-mark">E</span> Elmi's DevOps Lab</a><div class="navlinks"><a href="/">Home</a><a class="active" href="/stats">Statistics</a><a href="/about">About</a></div><span class="tag">● Project online</span></nav></header>
+  <main class="wrap">
+    <div class="page-head"><div class="eyebrow">Shared data · Redis</div><h1>Click statistics.</h1><p>See which reactions have appeared and which anonymous browsers have recorded the most clicks. All Flask replicas share this data through Redis.</p></div>
+    <div class="stats-grid">
+      <section class="panel"><div class="panel-title">All-time recorded requests</div><div class="big-stat" id="total">—</div><p class="fine">Includes the original CoderCo counter activity.</p></section>
+      <section class="panel"><div class="panel-title">Emoji reactions recorded</div><div class="big-stat" id="emoji-total">—</div><p class="fine">Reactions recorded using the personalised button.</p></section>
+      <section class="panel"><div class="panel-title">Reaction collection</div><ul class="data-list" id="reactions"><li class="empty">Loading…</li></ul></section>
+      <section class="panel"><div class="panel-title">Most active anonymous visitors</div><ol class="data-list" id="leaderboard"><li class="empty">Loading…</li></ol><p class="fine">Guest labels represent browsers, not verified people. Clearing browser storage creates a new identity.</p></section>
+    </div>
+  </main>
+  <footer class="footer">Built by Muhyadin Elmi · CoderCo Docker Challenge</footer>
+  <script>
+    async function loadStats() {
+      const reactionList = document.getElementById('reactions');
+      const leaderboard = document.getElementById('leaderboard');
+      try {
+        const response = await fetch('/api/stats');
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        document.getElementById('total').textContent = data.total;
+        document.getElementById('emoji-total').textContent = data.emoji_total;
+        reactionList.replaceChildren();
+        for (const item of data.reactions) {
+          const li = document.createElement('li');
+          const label = document.createElement('span'); label.className = 'label';
+          const emoji = document.createElement('span'); emoji.className = 'emoji'; emoji.textContent = item.emoji;
+          label.append(emoji, document.createTextNode(item.label));
+          const count = document.createElement('strong'); count.textContent = item.count;
+          li.append(label, count); reactionList.append(li);
+        }
+        leaderboard.replaceChildren();
+        if (!data.leaderboard.length) {
+          const li = document.createElement('li'); li.className = 'empty'; li.textContent = 'No clicks recorded yet.'; leaderboard.append(li);
+        }
+        for (const item of data.leaderboard) {
+          const li = document.createElement('li');
+          const guest = document.createElement('span'); guest.textContent = item.guest;
+          const score = document.createElement('strong'); score.textContent = `${item.clicks} click${item.clicks === 1 ? '' : 's'}`;
+          li.append(guest, score); leaderboard.append(li);
+        }
+      } catch (error) {
+        reactionList.textContent = '';
+        leaderboard.textContent = '';
+        const notice = document.createElement('p'); notice.className = 'empty'; notice.textContent = `Could not load statistics: ${error.message}`;
+        reactionList.append(notice);
+      }
+    }
+    loadStats();
+  </script>
+</body>
+</html>
