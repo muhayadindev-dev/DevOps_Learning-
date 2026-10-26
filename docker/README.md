@@ -124,33 +124,34 @@ That was useful for learning how Flask and Redis communicate. It also exposed an
 The final [Compose configuration](containers/docker-compose.yml) removes Flask's host-port mapping and introduces NGINX as the public entry point:
 
 ```yaml
-nginx:
-  image: nginx:alpine
-  ports:
-    - "5001:80"
-  depends_on:
-    - web
-  volumes:
-    - ./nginx.conf:/etc/nginx/nginx.conf:ro
+services:
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "5001:80"
+    depends_on:
+      - web
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
 
-web:
-  build:
-    context: ../applications
-    dockerfile: ../containers/Dockerfile.flask
-  image: flask:v1
-  depends_on:
-    - redis_client
-  environment:
-    REDIS_HOST: redis_client
-    REDIS_PORT: "6379"
+  web:
+    build:
+      context: ../applications
+      dockerfile: ../containers/Dockerfile.flask
+    image: flask:v1
+    depends_on:
+      - redis_client
+    environment:
+      REDIS_HOST: redis_client
+      REDIS_PORT: "6379"
 
-redis_client:
-  build:
-    context: .
-    dockerfile: Dockerfile.redis
-  image: redis.v1
-  volumes:
-    - redis_data:/data
+  redis_client:
+    build:
+      context: .
+      dockerfile: Dockerfile.redis
+    image: redis.v1
+    volumes:
+      - redis_data:/data
 
 volumes:
   redis_data:
