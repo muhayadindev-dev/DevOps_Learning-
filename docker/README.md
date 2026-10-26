@@ -394,70 +394,46 @@ On macOS, Docker Desktop must be permitted to access the project directory when 
 
 ## 6) Testing, Verification and Troubleshooting
 
-I used Docker commands, HTTP requests and application responses to check that the services were running and communicating. Rather than documenting successful tests separately from errors, each subsection records the test, the behaviour observed, any configuration problem and the result after making changes.
+I tested the services as I built the application, using Docker output, HTTP requests and the counter response to check each change. The main issues and their verification results are documented together below.
 
-### 6.1) Image Builds and Container Startup
+### 6.1) Docker Builds and Container Startup
 
-**Test performed.** I attempted to build and start the Flask and Redis services with Docker Compose:
+My first build attempts exposed several setup errors: Docker Desktop was not running, some Dockerfile paths did not match their build contexts, and the Compose file contained incorrect YAML field names. I started Docker Desktop, corrected the paths and fixed fields such as `environment` and `image`.
 
 ```bash
 docker compose up -d --build
 ```
 
-**Problems encountered.** Some early commands failed because Docker Desktop was not running and the Docker CLI could not reach the Engine. Other build attempts exposed incorrect Dockerfile paths and build contexts. I also corrected YAML fields such as `environment` and `image`.
+**Verification:** The custom Flask and Redis images built, and Compose created the services. This confirmed that the Engine and build configuration were working, although container startup alone did not establish application connectivity.
 
-**Resolution.** I started Docker Desktop, checked the location of the Compose file, corrected the build paths relative to their contexts and fixed the YAML fields.
+### 6.2) NGINX Configuration and Host Port Conflict
 
-**Verification and result.** Both custom images built successfully, and Compose could create and start the configured services. This established that the Docker Engine, build instructions and Compose configuration were working together. It did not, by itself, prove that HTTP requests could reach the application.
+The original Compose configuration attempted to publish Flask on port `5000`, but macOS ControlCenter/AirTunes was already using that port. Requests to it returned an unrelated `403` response. I introduced NGINX on `5001:80` and removed Flask's published host port.
 
-### 6.2) Host Port Conflict and HTTP Access
-
-**Test performed.** The original two-service configuration attempted to publish Flask directly using `5000:5000`.
-
-**Observation and problem.** Port `5000` was already being used by macOS ControlCenter/AirTunes. Requests to that address returned an unrelated `403` response, and the Flask container could not claim the same host port. Publishing a fixed port for every Flask replica would also prevent three replicas from sharing that host-port mapping.
-
-**Resolution.** I removed the published port from the Flask service and introduced NGINX with a `5001:80` port mapping. Flask continued listening on internal port `5000`, but browser requests now entered through NGINX.
-
-**Retest.**
+While configuring NGINX, I also corrected a filename mismatch (`nginx.config` versus `nginx.conf`) and a Docker Desktop bind-mount permission error. Once the configuration file was accessible inside the NGINX container, I checked the HTTP response:
 
 ```bash
 curl -i http://localhost:5001
 ```
 
-**Verification and result.** The response included HTTP `200 OK` and application content. This confirmed that traffic reached NGINX on the published host port and was forwarded successfully to a Flask backend.
+**Verification:** The request returned HTTP `200 OK` and application content, confirming that NGINX was forwarding requests to Flask.
 
-### 6.3) NGINX Configuration and Bind Mount
+### 6.3) Flask Scaling and Load Balancing
 
-**Test performed.** I configured Compose to mount the local `nginx.conf` file into the NGINX container in read-only mode.
-
-**Problems encountered.** An earlier filename was `nginx.config`, which did not match the `nginx.conf` path referenced by Compose. Docker Desktop also returned an `operation not permitted` error when accessing the file used for the bind mount.
-
-**Resolution.** I corrected the filename and checked the host directory access needed by Docker Desktop. The NGINX configuration was then available at `/etc/nginx/nginx.conf` inside the container.
-
-**Verification and result.** With the stack running, HTTP requests through port `5001` reached Flask and produced the application response. This provided an end-to-end check of the reverse-proxy path; simply starting the NGINX container would not have proved that the proxy was routing correctly.
-
-### 6.4) Flask Scaling and Shared Counter
-
-**Test performed.** I started the application with three replicas of the `web` service:
+An early scaling attempt used `web=3` without the `--scale` flag, so Compose interpreted it as a service name. I corrected the command and ran three Flask replicas behind NGINX:
 
 ```bash
 docker compose up -d --build --scale web=3
 docker compose ps
 ```
 
-**Problem encountered.** In an earlier attempt I entered `web=3` without the `--scale` flag, so Compose treated it as a service name rather than the requested replica count.
+**Verification:** Compose reported three Flask containers, NGINX and Redis. Repeated counter requests returned different Flask container identifiers while the shared total continued increasing. This demonstrated that more than one replica handled requests using the same Redis counter, without implying perfectly equal traffic distribution.
 
-**Resolution.** I corrected the command and removed the fixed host-port mapping from `web` so the replicas could run independently behind NGINX.
+### 6.4) Redis Connectivity and Persistence
 
-**Verification and result.** Compose reported three Flask containers, one NGINX container and one Redis container. Successive counter requests increased the same total while returning different Flask container identifiers. This showed that more than one Flask replica could process requests while sharing the Redis counter; it did not imply that every replica would receive an exactly equal number of requests.
+All three Flask replicas used the Compose hostname `redis_client` to connect to the same Redis service. I mounted `redis_data:/data` so Redis persistence files could outlive an individual container, then checked the counter after recreating Redis with the same named volume.
 
-### 6.5) Redis Persistence and Application Behaviour
-
-**Test performed.** I configured `redis_data:/data` and checked whether the counter could continue after the Redis container was recreated with the same named volume.
-
-**Observation and verification.** The original counter retained its recorded value when Redis reused the volume. This showed that the previously persisted data remained available independently of the removed container. A named volume preserves files, but it does not guarantee that every recent write has been flushed to disk.
-
-**Application result.** The updated homepage displays the shared total, a changing emoji reaction, the browser's recorded clicks and the hostname of the Flask container handling the interaction. These elements are visible in the application screenshot above. The Statistics and About pages, including the statistics API, should be verified separately before recording detailed results for those routes.
+**Verification:** The original counter continued from its stored value. The updated homepage also displays the global count, emoji reaction, responding Flask container and anonymous browser click count, as shown in the demo screenshot. The Statistics and About pages have not yet been independently documented with test results. A volume preserves saved files but does not guarantee every recent Redis write has been flushed to disk.
 
 ## 7) Key Learning
 
