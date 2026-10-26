@@ -361,11 +361,9 @@ The application now uses several Redis data structures:
 
 The interaction endpoint updates these values using a Redis transaction and returns the counter value, reaction, guest label and responding container hostname. Keeping this state in Redis allows different Flask replicas to display the same totals.
 
-## 5) Running the Project
+## 5) Running the Application Locally
 
-**Requirements:** Docker Desktop, or Docker Engine with the Docker Compose plugin.
-
-The application source and documentation are available on the repository's `main` branch:
+Docker Desktop (or Docker Engine with the Compose plugin) is required. From a terminal, clone the repository and start the application using Docker Compose:
 
 ```bash
 git clone https://github.com/muhayadindev-dev/DevOps_Learning-.git
@@ -373,24 +371,22 @@ cd DevOps_Learning-/docker/containers
 docker compose up -d --build --scale web=3
 ```
 
-This command builds the custom images, starts the services in the background and requests three Flask replicas. Open `http://localhost:5001` in a browser to access the application.
+The Compose command builds the application images and starts NGINX, Redis and three Flask replicas in the background. Once running, the dashboard is available at **http://localhost:5001**.
 
-To inspect the containers and test HTTP access:
+To check the running services or inspect the HTTP response:
 
 ```bash
 docker compose ps
 curl -i http://localhost:5001
-curl -i http://localhost:5001/count
-docker compose logs nginx
 ```
 
-Stop the application while retaining the Redis named volume:
+To stop the containers without deleting the Redis named volume:
 
 ```bash
 docker compose down
 ```
 
-On macOS, Docker Desktop must be permitted to access the project directory when mounting `nginx.conf` from the host into the NGINX container.
+On macOS, Docker Desktop may need permission to access the project directory so NGINX can mount its configuration file.
 
 ## 6) Testing, Verification and Troubleshooting
 
