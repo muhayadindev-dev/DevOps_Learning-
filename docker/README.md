@@ -1,85 +1,77 @@
-# Docker Visit Counter — An Engineering Build Log
+# Docker Visit Counter — Flask, Redis and NGINX
 
-> **One shared counter. Three Flask replicas. Five running containers.**  
-> A CoderCo Docker challenge extended with NGINX load balancing, Redis persistence and a personalised click dashboard.
+## Project overview
 
-**Stack:** Docker · Docker Compose · Python/Flask · Redis · NGINX · HTML/CSS/JavaScript  
-**Author:** Muhyadin Elmi
+This project began with CoderCo's multi-container Docker assignment: running a Python Flask application and a Redis database in separate containers, then connecting them through Docker Compose. I extended the application to include an NGINX reverse proxy, three Flask replicas, persistent Redis storage and a web interface with a shared counter, changing emoji reactions and an anonymous activity leaderboard.
 
-## The application
+The aim was to understand how several containers work together as one application. That involved building different images, configuring service-to-service communication, separating internal and published ports, and investigating failures during deployment.
 
-I started with CoderCo's challenge: run a Flask application and Redis as separate containers, then make a visit counter work across them. I extended the setup to run three Flask replicas behind NGINX and later added a dashboard with emoji reactions, statistics and an anonymous leaderboard.
+**Technologies:** Docker, Docker Compose, Python, Flask, Redis, NGINX, HTML, CSS and JavaScript.
 
-The counter and reaction data live in **one Redis service**, so requests handled by different Flask containers share the same state. Docker Compose defines the services, builds the custom images and creates the network connecting them.
+### Application demo
 
-### Demo — video coming soon
+![Docker counter showing the shared visit count and the Flask container that handled the request](assets/counter-preview.png)
 
-![Development-stage Docker visit counter showing a shared count and responding Flask container](assets/counter-preview.png)
+### Application functionality
 
-*Temporary still from an earlier working version of the counter (count: 20). I will replace it with a 30–45-second recording of the finished dashboard and project walkthrough. The current UI has evolved since this screenshot.*
+The web interface has three pages:
 
-The completed application is intended to run locally at **`http://localhost:5001`**. The GitHub repository contains the source code; it does not itself host the running application.
+- **Dashboard (`/`):** Displays the shared interaction count. Clicking the counter sends a `POST` request to `/api/click`. Flask updates Redis and returns the new total, a randomly selected reaction, the anonymous browser label and the hostname of the Flask container that handled the request.
+- **Statistics (`/stats`):** Displays the distribution of emoji reactions and a leaderboard ranked by recorded clicks. The page retrieves the figures from `GET /api/stats`; the information comes from Redis rather than an independent counter in each container.
+- **About (`/about`):** Describes the technologies used and their responsibilities within the application.
 
-### What the application exposes
+I also retained the original `GET /count` endpoint from the assignment. It increments the same shared `visits` value and returns the responding container's hostname, which is useful when checking requests across replicas.
 
-| Route | Purpose |
-| --- | --- |
-| `GET /` | Interactive dashboard with the shared counter and last reaction |
-| `POST /api/click` | Records a click in Redis, chooses an emoji and returns the responding Flask container ID |
-| `GET /stats` | Statistics page: reaction collection and anonymous activity leaderboard |
-| `GET /api/stats` | JSON totals, reaction counts and leaderboard entries |
-| `GET /about` | Explains the components and request flow |
-| `GET /count` | Original CoderCo-style route: increments and displays the Redis counter |
+The counter records interactions, **not unique visitors**. The leaderboard uses a randomly generated identifier stored in each browser's local storage. It does not collect real names or establish a verified user identity. Reaction totals are recorded separately from the original `/count` requests, so they may differ from the overall counter.
 
-The displayed total counts recorded **interactions**, not verified unique visitors. The anonymous leaderboard identifies browsers using locally stored random IDs, not real people. The emoji total counts only clicks made through the personalised button; it may differ from the older `/count` total.
-
-## Follow one request
+## Application architecture
 
 ```mermaid
 flowchart TB
-    Client["Browser / curl<br/>localhost:5001"] -->|"HTTP over TCP"| Proxy
+    Browser["Client browser"]
 
-    subgraph Compose["Docker Compose network"]
-        Proxy["NGINX<br/>port 80"]
-        Proxy --> Flask1["Flask replica 1<br/>port 5000"]
-        Proxy --> Flask2["Flask replica 2<br/>port 5000"]
-        Proxy --> Flask3["Flask replica 3<br/>port 5000"]
-        Flask1 -->|"Redis protocol :6379"| Redis["Redis<br/>shared counter"]
-        Flask2 --> Redis
-        Flask3 --> Redis
+    subgraph Compose["Docker Compose environment"]
+        Nginx["NGINX reverse proxy: 80"]
+        F1["Flask replica 1: 5000"]
+        F2["Flask replica 2: 5000"]
+        F3["Flask replica 3: 5000"]
+        Redis["Redis: 6379"]
     end
 
-    Redis --> Volume[("redis_data<br/>named volume")]
-    Config["nginx.conf<br/>on the host"] -.->|"read-only bind mount"| Proxy
+    Storage[("redis_data named volume")]
 
-    classDef edge fill:#142a46,stroke:#83d9ff,color:#ffffff
-    classDef app fill:#203e60,stroke:#377dde,color:#ffffff
-    classDef data fill:#123e42,stroke:#7ce1be,color:#ffffff
-    class Client,Proxy,Config edge
-    class Flask1,Flask2,Flask3 app
-    class Redis,Volume data
+    Browser -->|"HTTP to host port 5001"| Nginx
+    Nginx --> F1
+    Nginx --> F2
+    Nginx --> F3
+    F1 --> Redis
+    F2 --> Redis
+    F3 --> Redis
+    Redis -->|"Persistence files in /data"| Storage
 ```
 
-1. A browser connects to **host port 5001**, published to **port 80** in the NGINX container.
-2. NGINX acts as a reverse proxy. Its upstream uses Docker's internal DNS to reach the `web` service, whose three containers listen internally on port 5000.
-3. One Flask replica handles the HTTP request. A counter request or dashboard click makes that application talk to Redis on port 6379.
-4. Redis maintains the shared data. Its `/data` directory is backed by a Docker-managed named volume for persistence files.
-5. The Flask response returns through NGINX to the browser. The response can identify which Flask replica served it.
+The request moves through the following components:
 
-NGINX uses its default round-robin upstream balancing method; that does **not** guarantee perfectly equal workload or application health. Redis is accessed internally and has no published host port.
+1. **Client and published port:** The browser connects to `http://localhost:5001`. Docker forwards traffic from port `5001` on my Mac to port `80` inside the NGINX container.
+2. **NGINX reverse proxy:** NGINX receives the HTTP request and forwards it to a Flask backend. Three containers run the same Flask image; NGINX can distribute requests across their internal addresses.
+3. **Flask application:** A replica processes the request. For an interaction that needs stored data, the Python application connects to Redis using its Compose service name and port `6379`.
+4. **Redis and storage:** All Flask replicas use the same Redis service, so the count does not start again when another replica responds. Redis has a named volume mounted at `/data` for its persistence files.
+5. **Response:** Flask sends the result back through NGINX to the browser. The application can also return the Flask container's hostname to help demonstrate which replica handled a request.
 
-## The files and the decisions behind them
+Only NGINX needs a published host port for browser access. Flask and Redis communicate on the internal Compose network. The `nginx.conf` file determines how NGINX forwards requests; it is configuration mounted into the container, **not an additional component in the network request path**.
 
-This project sits in the `docker/` directory of my wider DevOps learning repository.
+## Project files
+
+The project is stored in the `docker/` directory of my DevOps learning repository:
 
 ```text
 docker/
 ├── README.md
 ├── assets/
-│   └── counter-preview.png       # Temporary demo still
+│   └── counter-preview.png
 ├── applications/
-│   ├── app.py                    # Flask routes and Redis operations
-│   ├── requirements.txt          # Python application dependencies
+│   ├── app.py
+│   ├── requirements.txt
 │   ├── templates/
 │   │   ├── index.html
 │   │   ├── stats.html
@@ -93,35 +85,60 @@ docker/
     └── nginx.conf
 ```
 
-### Packaging two different services
+- `applications/` contains the Flask application, its Python dependencies, HTML templates and styling.
+- `containers/` contains the image definitions, Docker Compose services and NGINX routing configuration.
+- `assets/` contains the application image used in this documentation.
 
-I created separate Dockerfiles because the applications need different software.
+## Building and configuring the application
 
-- **[Flask Dockerfile](containers/Dockerfile.flask):** `python:3.12-slim` supplies Python, but not Flask or the Redis Python client. The image copies the application files from its build context and installs the packages in [`requirements.txt`](applications/requirements.txt) with `RUN pip install`. Its default `CMD` starts `app.py` when the container runs.
-- **[Redis Dockerfile](containers/Dockerfile.redis):** `redis:7-alpine` already contains the Redis server. I didn't need another installation step. This Dockerfile uses the base image and documents port 6379 with `EXPOSE`.
+### 1. Creating the Flask and Redis images
 
-**What clicked for me:** there isn't one fixed Dockerfile recipe. The instructions depend on what's already in the base image and what the application still needs. `RUN` performs a build-time step; `CMD` provides a default startup command. `EXPOSE` documents a port—it does not publish it on my Mac.
+I used two Dockerfiles because Flask and Redis have different dependencies.
 
-### The Compose configuration changed as the project grew
+**[Dockerfile.flask](containers/Dockerfile.flask)**
 
-My earlier two-service setup published Flask directly to my Mac:
-
-```yaml
-# Reconstructed excerpt from the earlier Flask + Redis stage.
-web:
-  ports:
-    - "5000:5000"
-  depends_on:
-    - redis_client
-
-redis_client:
-  volumes:
-    - redis_data:/data
+```dockerfile
+FROM python:3.12-slim
+WORKDIR ./app
+COPY . .
+RUN pip install --no-cache-dir -r requirements.txt
+EXPOSE 5000
+CMD ["python", "app.py"]
 ```
 
-That was useful for learning how Flask and Redis communicate. It also exposed an important limitation: a fixed published host port cannot be claimed simultaneously by three Flask replicas.
+The `python:3.12-slim` base image provides Python, but does not include Flask or the Python Redis client. Those are declared in [`requirements.txt`](applications/requirements.txt) and installed with `RUN` **during the image build**. `COPY` adds the application files from the build context, while `CMD` specifies the command used to start the Flask application **when the container runs**. `EXPOSE 5000` documents the application's listening port; it does not publish that port on the Mac.
 
-The final [Compose configuration](containers/docker-compose.yml) removes Flask's host-port mapping and introduces NGINX as the public entry point:
+**[Dockerfile.redis](containers/Dockerfile.redis)**
+
+```dockerfile
+FROM redis:7-alpine
+EXPOSE 6379
+```
+
+The official Redis base image already provides the Redis server and its startup behaviour, so there was no additional package installation or startup command to define.
+
+This was one of the main lessons from the assignment: a Dockerfile is determined by the software the application requires and what its selected base image already contains. The Flask image needed additional Python packages, whereas the Redis image did not.
+
+### 2. Configuring Docker Compose
+
+I initially connected Flask directly to the Mac using `5000:5000`, with Redis running as a separate service. The relevant part of that earlier configuration was:
+
+```yaml
+services:
+  web:
+    ports:
+      - "5000:5000"
+    depends_on:
+      - redis_client
+
+  redis_client:
+    volumes:
+      - redis_data:/data
+```
+
+This is a reconstructed excerpt of the original two-service arrangement, rather than an exact historical Git snapshot. It was sufficient for an initial Flask–Redis test, but the fixed host port later became a problem when I scaled Flask.
+
+The current [`docker-compose.yml`](containers/docker-compose.yml) defines the NGINX, Flask and Redis services:
 
 ```yaml
 services:
@@ -157,19 +174,17 @@ volumes:
   redis_data:
 ```
 
-The older excerpt is reconstructed from my development work; it is **not** presented as an exact historical Git revision. The final YAML above reflects the current repository configuration.
+**Build context and Dockerfile paths.** The Flask build context is `../applications`, which makes the application files available to `COPY`. Its Dockerfile is referenced relative to that context as `../containers/Dockerfile.flask`. Redis uses `.` as its build context because its Dockerfile is in the same directory as the Compose file. Understanding these relative paths was necessary when resolving build errors.
 
-Three details were especially important:
+**Service discovery and environment variables.** Compose creates an internal network and provides DNS resolution for service names. The Flask container receives `REDIS_HOST=redis_client` and `REDIS_PORT=6379`, which tell the Python Redis client where to connect. Using `localhost` would point back to the Flask container's own network environment, not the Redis container. The environment variables let me change connection settings without editing the Python source. `depends_on` controls startup order; it does not create the network connection or guarantee that Redis is ready.
 
-**Build paths.** `context` identifies the build input directory relative to the Compose file. The `dockerfile` location is resolved relative to that build context. The Flask build context is `../applications`, whereas the Redis build context is the `containers/` directory itself.
+**Named volume.** The `redis_data:/data` mapping mounts a Docker-managed volume at Redis's data directory. This separates saved files from the container's writable layer, so a replacement Redis container can reuse data that Redis has written to disk. A normal `docker compose down` preserves named volumes, while `docker compose down -v` removes them. The volume alone is not a guarantee that every recent Redis update has been flushed to disk.
 
-**Networking and configuration.** Compose creates an internal network and provides DNS resolution for service names. Flask connects to `redis_client:6379`, not `localhost:6379` (which would refer to the Flask container's own network environment). The `REDIS_HOST` and `REDIS_PORT` environment variables let me change the connection settings without editing Python. `depends_on` starts Redis before Flask, but doesn't by itself wait until Redis is healthy.
+### 3. Introducing NGINX and three Flask replicas
 
-**Persistence.** The named volume `redis_data:/data` keeps Redis's persistence files separate from the container's writable filesystem. Recreating Redis with the same volume allows it to recover data that Redis has written to disk. The volume remains after a normal `docker compose down`, but `docker compose down -v` removes it.
+NGINX became the single entry point for the application. Instead of publishing Flask directly to the Mac, Compose publishes `5001:80` for NGINX and leaves the Flask replicas accessible only through the internal Docker network.
 
-### Putting NGINX in front of Flask
-
-I integrated NGINX into Compose, mounted [nginx.conf](containers/nginx.conf) as a read-only file, and used it as the client-facing reverse proxy.
+I integrated the following [`nginx.conf`](containers/nginx.conf) into the Compose service using a read-only bind mount:
 
 ```nginx
 events {}
@@ -192,30 +207,30 @@ http {
 }
 ```
 
-The `resolver` points to Docker's internal DNS, the `upstream` names the Flask backend, and `proxy_pass` forwards HTTP requests to it. The `resolve` option allows NGINX to refresh the backend addresses. NGINX listens on port 80 **inside its container** while Docker publishes that endpoint on my Mac at `localhost:5001`.
+In this configuration, `listen 80` identifies the port used by NGINX inside the container. The `upstream` block defines the Flask backend using the Compose service name `web`, and `proxy_pass` sends matching HTTP requests to that backend. The resolver uses Docker's internal DNS at `127.0.0.11`; the `resolve` setting supports changes to the resolved backend addresses.
 
-I then ran three replicas of the `web` service. Each replica runs the same application image but has its own container identity; all three connect to the same Redis data store.
+Starting three `web` replicas creates three Flask containers from the same image. They each listen on port `5000` inside their own network environment, so they do not need three separate published host ports. NGINX can forward requests to these replicas, and they all use the same Redis store. NGINX's default round-robin selection distributes connections across available upstream addresses, but it does not guarantee exactly equal request counts or application health.
 
-### Personalising the finished application
+### 4. Extending the counter application
 
-The original challenge used a welcome route and a simple Redis-backed counter. I kept the `/count` route and extended the application with a responsive dashboard, changing emoji reactions and statistics.
+I retained the Redis-backed visit counter and added a dashboard interaction that selects a reaction and records activity against an anonymous browser ID.
 
-[`app.py`](applications/app.py) uses Redis keys and data structures for different jobs:
+The [Flask application](applications/app.py) uses several Redis data structures:
 
-| Redis data | Used for |
+| Redis key | Purpose |
 | --- | --- |
-| `visits` | Shared total incremented by `/count` and the dashboard click action |
-| `emoji_counts` | Counts for each emoji reaction |
-| `guest_scores` | Sorted scores for the anonymous leaderboard |
-| `last_reaction` | Previous emoji, used to avoid immediate repeats during ordinary sequential clicks |
+| `visits` | Shared count updated by both `/count` and dashboard clicks |
+| `emoji_counts` | Hash storing the number of times each emoji was selected |
+| `guest_scores` | Sorted set used to rank anonymous browser labels by clicks |
+| `last_reaction` | Previous emoji, used to avoid an immediate repeat during ordinary sequential requests |
 
-The browser holds a random anonymous ID in local storage for the demo leaderboard. This is **not an account or verified identity**, and resetting browser storage creates a new label. The project is a learning application, not an analytics system tracking unique people.
+The interaction endpoint updates these values using a Redis transaction and returns the counter value, reaction, guest label and responding container hostname. Keeping this state in Redis allows different Flask replicas to display the same totals.
 
-## Run the stack locally
+## Running the project
 
-**Prerequisites:** Docker Desktop or a working Docker Engine with Docker Compose.
+**Requirements:** Docker Desktop, or Docker Engine with the Docker Compose plugin.
 
-The personalised version currently lives on the feature branch while its [pull request](https://github.com/muhayadindev-dev/DevOps_Learning-/pull/1) is under review:
+The application source and this documentation are available on the project's feature branch:
 
 ```bash
 git clone --branch feature/docker-personal-dashboard https://github.com/muhayadindev-dev/DevOps_Learning-.git
@@ -223,11 +238,9 @@ cd DevOps_Learning-/docker/containers
 docker compose up -d --build --scale web=3
 ```
 
-`up` creates and starts the services, `-d` runs them in the background, `--build` builds configured images before starting, and `--scale web=3` requests three Flask containers.
+This command builds the custom images, starts the services in the background and requests three Flask replicas. Open `http://localhost:5001` in a browser to access the application.
 
-Open **http://localhost:5001** in a browser. The Statistics and About pages are at `/stats` and `/about`. The original CoderCo counter endpoint remains available at `/count`.
-
-Useful checks from the same `docker/containers` directory:
+To inspect the containers and test HTTP access:
 
 ```bash
 docker compose ps
@@ -236,58 +249,70 @@ curl -i http://localhost:5001/count
 docker compose logs nginx
 ```
 
-Stop the stack without deleting the named volume:
+Stop the application while retaining the Redis named volume:
 
 ```bash
 docker compose down
 ```
 
-**Note for macOS:** Docker Desktop needs permission to share the project directory when a Compose service bind-mounts a local file such as `nginx.conf`.
+On macOS, Docker Desktop must be permitted to access the project directory when mounting `nginx.conf` from the host into the NGINX container.
 
-## Evidence, not assumptions
+## Testing and verification
 
-These were the observations from my original working counter setup. The newer personalised dashboard still needs a full end-to-end check after rebuilding the updated Flask image.
+The initial Flask–Redis counter and NGINX setup were checked through Docker's container status output, terminal requests and the counter response.
 
-| Check | What I observed | What that proves |
+| Verification | Observed result | Significance |
 | --- | --- | --- |
-| Container status | NGINX, Redis and three Flask replicas running | Compose started the intended five containers; not by itself proof of connectivity |
-| HTTP access | `curl -i http://localhost:5001` returned `HTTP/1.1 200 OK` with the application response | NGINX reached a working Flask backend |
-| Shared counter | The counter increased across requests | Flask could update and read shared Redis data |
-| Load balancing | Counter values increased while at least two different Flask container IDs appeared | Requests reached different replicas, sharing the same counter |
-| Persistence | Counter continuity was checked after Redis container recreation with its named volume | Saved Redis data was retained in that test |
+| `docker compose ps` | NGINX, Redis and three Flask containers running | The Compose services and requested replica count started |
+| `curl -i http://localhost:5001` | HTTP `200 OK` and an application response | NGINX received the request and reached a Flask backend |
+| Counter requests | The count increased across successive requests | Flask communicated with the shared Redis service |
+| Flask container hostname | Different replica identifiers appeared in responses | Requests were handled by more than one Flask container |
+| Redis volume test | Counter continuity after Redis container recreation | Previously written Redis data was recovered using the named volume |
 
-**Checks to repeat before merging the PR:** Verify that the new dashboard records clicks, changes reactions, displays the responding Flask container, and populates `/stats` correctly. Also verify that `/about` and the original `/count` route still work. I will replace the temporary preview still with a short demonstration recording.
+These observations relate to the working counter configuration. They are not a substitute for independently testing every route and interaction added to the personalised dashboard.
 
-## When things broke — and what I learned
+## Problems encountered and resolutions
 
-The working application is only half the story. These are actual problems I encountered during the build and the engineering lessons they exposed.
+### Docker Engine was not running
 
-| Incident | What I investigated or changed | Key learning |
-| --- | --- | --- |
-| Docker daemon unavailable | Started Docker Desktop before retrying Docker commands | The Docker CLI needs a running Engine to build or manage containers |
-| Dockerfile build paths | Checked `build.context`, the Dockerfile path and the directories used by Compose | Dockerfile paths and build contexts are related but not interchangeable |
-| Compose YAML mistakes | Corrected field names such as `environment` and `image` | Small YAML errors can prevent a stack from being interpreted correctly |
-| Port 5000 conflict | `localhost:5000` returned an AirTunes-related `403`; used an available host port for NGINX | A host address and port can be bound by only one listener at a time |
-| Flask scaling | Removed the fixed `5000:5000` host mapping from `web` and routed requests through NGINX | Multiple replicas can use the same *internal* port while sharing one reverse-proxy entry point |
-| NGINX configuration file | Found `nginx.config` instead of the expected `nginx.conf` | Bind-mount paths and filenames must match exactly |
-| Docker Desktop bind mount | Investigated `operation not permitted` when NGINX tried to mount the configuration | Host file-sharing permissions affect bind mounts on Docker Desktop |
-| Compose scaling syntax | Corrected `web=3` to `--scale web=3` | Without the flag, Compose interpreted `web=3` as a service name |
+Some initial Docker commands failed because the Docker daemon was unavailable. After opening Docker Desktop, the CLI could communicate with the Engine and the builds could proceed. This distinguished a Docker Engine connectivity problem from an error in the Dockerfile.
 
-The port issue taught me two separate lessons: macOS already had a service listening on port 5000, **and** three Flask replicas could not all publish that same fixed host port even if it were otherwise available. Publishing NGINX as `5001:80` while leaving Flask internal solved both design problems.
+### Incorrect build paths and Compose fields
 
-My biggest conceptual challenge was **working out application dependencies before writing Dockerfiles**. The Python base image includes Python but still needs Flask and the Redis client installed; the Redis base image already contains its server. This made me realise that Dockerfile instructions depend on the application and what its base image provides.
+I encountered errors when specifying Dockerfile paths and build contexts. I checked where `docker-compose.yml` was located and how each service resolved its `context` and `dockerfile` settings. I also corrected YAML field names, including `environment` instead of `environments` and `image` instead of `images`. These errors showed how much the configuration depends on exact paths, spelling and indentation.
 
-## What I would improve next
+### Port 5000 was occupied on macOS
 
-- **Production serving:** Replace Flask's built-in development server with a production-suitable WSGI server.
-- **Startup readiness:** Add health checks and retry behaviour rather than relying solely on `depends_on` startup ordering.
-- **Testing:** Add repeatable integration checks for the counter, dashboard API and Redis reconnection.
-- **Data durability:** Review Redis persistence settings; keeping `/data` on a volume does not by itself guarantee that every recent write has reached disk.
-- **Delivery:** Add CI checks and publish versioned images when extending the project beyond this local learning exercise.
+The initial Compose file published Flask at `5000:5000`. On my Mac, port `5000` was already being used by a macOS service associated with AirTunes/ControlCenter, and accessing that address returned a `403` response unrelated to my Flask application.
 
-This project began as a small Flask/Redis exercise. The most valuable part for me was learning to connect the Dockerfiles, Compose configuration, networking, storage and reverse proxy—and then using terminal evidence to investigate when those pieces didn't work together.
+I investigated the listener on port `5000` and changed the architecture so NGINX published an available host port, `5001`. I also removed Flask's host-port mapping. This resolved the local port conflict and allowed multiple Flask replicas to use their own internal port `5000` without competing for a single host port.
 
----
+### NGINX bind-mount and configuration errors
 
-**Challenge:** [CoderCo Containers Intro — multi-container application](https://github.com/codercohq/containers-intro/tree/main/challenge)  
-**Current work:** [Review the personalised dashboard pull request](https://github.com/muhayadindev-dev/DevOps_Learning-/pull/1)
+NGINX initially failed because the local configuration filename did not match the file referenced in Compose: `nginx.config` versus `nginx.conf`. A separate `operation not permitted` error involved Docker Desktop's access to the directory used for the bind mount. Checking the file path and host-sharing permissions resolved these problems.
+
+### Incorrect scaling command
+
+An attempt to specify `web=3` without the `--scale` flag caused Compose to treat it as a service name. The correct command was `docker compose up -d --build --scale web=3`. This started the three Flask replicas alongside NGINX and Redis.
+
+## Key learning
+
+The hardest part was understanding which dependencies each application needed before writing its Dockerfile. The Python base image supplied the Python runtime, but Flask and the Redis client still had to be installed. The Redis base image already contained the Redis server. This changed how I approached image construction: first identify the application's requirements, then decide what the Dockerfile needs to add.
+
+The networking and scaling work also connected several concepts I had previously studied separately:
+
+- A **published port** exposes a container service through the host; containers can still communicate over a Docker network without publishing their ports.
+- A **Compose service name** is resolvable on the internal network, so Flask can reach `redis_client` without using the Mac's `localhost` address.
+- **Environment variables** provide application connection settings; `depends_on` only controls startup ordering.
+- **Replicas** run separate containers from the same image, while a **shared Redis service** allows them to work with the same counter.
+- A **named volume** preserves stored files across container replacement, subject to the application's persistence behaviour.
+
+## Further improvements
+
+- Replace Flask's development server with a production-suitable WSGI server.
+- Add health checks and retry handling for dependencies during startup.
+- Introduce integration tests for counter updates, API responses, statistics and Redis reconnection.
+- Review Redis persistence settings and recovery behaviour.
+- Add automated build and validation checks to the Git workflow.
+
+**Assignment reference:** [CoderCo — Containers Intro Challenge](https://github.com/codercohq/containers-intro/tree/main/challenge)
