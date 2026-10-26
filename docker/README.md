@@ -211,11 +211,146 @@ In this configuration, `listen 80` identifies the port used by NGINX inside the 
 
 Starting three `web` replicas creates three Flask containers from the same image. They each listen on port `5000` inside their own network environment, so they do not need three separate published host ports. NGINX can forward requests to these replicas, and they all use the same Redis store. NGINX's default round-robin selection distributes connections across available upstream addresses, but it does not guarantee exactly equal request counts or application health.
 
-### 4.4) Extending the Counter Application
+### 4.4) Flask Application — Initial and Final Versions
 
-I retained the Redis-backed visit counter and added a dashboard interaction that selects a reaction and records activity against an anonymous browser ID.
+The Flask application changed significantly during this project. The initial version demonstrated communication with Redis and exposed a basic counter. The final version retained that counter and added the interactive dashboard, statistics API, emoji reactions and anonymous leaderboard.
 
-The [Flask application](applications/app.py) uses several Redis data structures:
+NGINX is configured separately in `nginx.conf` and Docker Compose; it is not implemented inside the Flask Python file. It forwards requests to whichever Flask replica is selected.
+
+#### 4.4.1) Initial Flask Application
+
+This is the original [`app.py` from the first Docker project commit](https://github.com/muhayadindev-dev/DevOps_Learning-/blob/aecfa1926155b7ac93eede6eaf060c13c0677699/docker/applications/app.py):
+
+```python
+import os
+import socket
+
+from flask import Flask, render_template
+import redis
+
+app = Flask(__name__)
+
+redis_client = redis.Redis(
+    host=os.getenv("REDIS_HOST", "redis"),
+    port=int(os.getenv("REDIS_PORT", "6379")),
+    decode_responses=True
+)
+
+@app.route("/")
+def home():
+    return render_template("index.html")
+
+@app.route("/count")
+def count():
+    visits = redis_client.incr("visits")
+    hostname = socket.gethostname()
+
+    return f"Visit count: {visits} | Container: {hostname}"
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
+```
+
+The home route rendered a template, while `/count` incremented the `visits` key in Redis. The response also included `socket.gethostname()`, making it possible to see which Flask container handled the request. The Redis connection already used environment variables, so the hostname and port did not need to be hardcoded.
+
+#### 4.4.2) Final Flask Application
+
+The current [`app.py`](applications/app.py) contains the original counter route alongside the additional pages and API endpoints:
+
+```python
+import os
+import random
+import re
+import socket
+
+import redis
+from flask import Flask, jsonify, render_template, request
+
+app = Flask(__name__)
+
+redis_client = redis.Redis(
+    host=os.getenv("REDIS_HOST", "redis_client"),
+    port=int(os.getenv("REDIS_PORT", "6379")),
+    decode_responses=True,
+)
+
+REACTIONS = [
+    {"emoji": "🚀", "label": "Shipped it"},
+    {"emoji": "🐳", "label": "Container victory"},
+    {"emoji": "🔥", "label": "On a roll"},
+    {"emoji": "⚡", "label": "Quick fix"},
+    {"emoji": "🧠", "label": "Eureka moment"},
+    {"emoji": "🛠️", "label": "Debugging complete"},
+    {"emoji": "🎯", "label": "Nailed it"},
+    {"emoji": "💪", "label": "Kept going"},
+]
+
+@app.route("/")
+def home():
+    return render_template("index.html")
+
+@app.route("/about")
+def about():
+    return render_template("about.html")
+
+@app.route("/stats")
+def stats_page():
+    return render_template("stats.html")
+
+@app.route("/count")
+def count():
+    visits = redis_client.incr("visits")
+    return f"Visit count: {visits} | Container: {socket.gethostname()}"
+
+@app.post("/api/click")
+def click():
+    payload = request.get_json(silent=True) or {}
+    guest_id = payload.get("guest_id", "")
+    if not isinstance(guest_id, str) or not re.fullmatch(r"[a-f0-9]{12}", guest_id):
+        return jsonify({"error": "Invalid anonymous visitor ID"}), 400
+
+    previous = redis_client.get("last_reaction")
+    reaction = random.choice([item for item in REACTIONS if item["emoji"] != previous])
+    guest = f"Guest-{guest_id[:6].upper()}"
+    transaction = redis_client.pipeline(transaction=True)
+    transaction.incr("visits")
+    transaction.hincrby("emoji_counts", reaction["emoji"], 1)
+    transaction.zincrby("guest_scores", 1, guest)
+    transaction.set("last_reaction", reaction["emoji"])
+    total, _, score, _ = transaction.execute()
+
+    return jsonify({
+        "total": total,
+        "reaction": reaction,
+        "your_clicks": int(score),
+        "guest": guest,
+        "container": socket.gethostname(),
+    })
+
+@app.get("/api/stats")
+def stats_api():
+    counts = redis_client.hgetall("emoji_counts")
+    leaderboard = redis_client.zrevrange("guest_scores", 0, 9, withscores=True)
+    return jsonify({
+        "total": int(redis_client.get("visits") or 0),
+        "emoji_total": sum(int(value) for value in counts.values()),
+        "reactions": [
+            {"emoji": item["emoji"], "label": item["label"], "count": int(counts.get(item["emoji"], 0))}
+            for item in REACTIONS
+        ],
+        "leaderboard": [
+            {"guest": guest, "clicks": int(score)}
+            for guest, score in leaderboard
+        ],
+    })
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
+```
+
+The main differences are the `/api/click` endpoint, which validates a browser-generated identifier and records an interaction, and `/api/stats`, which reads the stored reaction totals and leaderboard. The `/stats` and `/about` routes render their respective HTML pages. The original `/count` route remains available.
+
+The application now uses several Redis data structures:
 
 | Redis key | Purpose |
 | --- | --- |
@@ -230,10 +365,10 @@ The interaction endpoint updates these values using a Redis transaction and retu
 
 **Requirements:** Docker Desktop, or Docker Engine with the Docker Compose plugin.
 
-The application source and this documentation are available on the project's feature branch:
+The application source and documentation are available on the repository's `main` branch:
 
 ```bash
-git clone --branch feature/docker-personal-dashboard https://github.com/muhayadindev-dev/DevOps_Learning-.git
+git clone https://github.com/muhayadindev-dev/DevOps_Learning-.git
 cd DevOps_Learning-/docker/containers
 docker compose up -d --build --scale web=3
 ```
