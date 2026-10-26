@@ -95,7 +95,7 @@ docker/
 
 I used two Dockerfiles because Flask and Redis have different dependencies.
 
-**[Dockerfile.flask](containers/Dockerfile.flask)**
+**Flask Dockerfile — [`Dockerfile.flask`](containers/Dockerfile.flask)**
 
 ```dockerfile
 FROM python:3.12-slim
@@ -108,7 +108,7 @@ CMD ["python", "app.py"]
 
 The `python:3.12-slim` base image provides Python, but does not include Flask or the Python Redis client. Those are declared in [`requirements.txt`](applications/requirements.txt) and installed with `RUN` **during the image build**. `COPY` adds the application files from the build context, while `CMD` specifies the command used to start the Flask application **when the container runs**. `EXPOSE 5000` documents the application's listening port; it does not publish that port on the Mac.
 
-**[Dockerfile.redis](containers/Dockerfile.redis)**
+**Redis Dockerfile — [`Dockerfile.redis`](containers/Dockerfile.redis)**
 
 ```dockerfile
 FROM redis:7-alpine
