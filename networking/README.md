@@ -1,10 +1,14 @@
 # Networking — AWS EC2, NGINX and DNS Deployment
 
-## Project overview
+**Section:** Networking · [Repository Home](../README.md)
 
-This project brought together the networking concepts I had been covering and applied them in a practical AWS deployment. The goal was to understand the full path from a public domain name to a web server running on an Ubuntu EC2 instance, and how DNS, IP addressing, security groups, SSH, HTTP and NGINX fit together end to end.
+A practical networking project that brings together DNS, public/private IP addressing, security groups, SSH, HTTP and NGINX in one AWS deployment.
 
-For the CoderCo Networking project, I deployed NGINX on an Ubuntu EC2 instance, controlled inbound access with an AWS security group, and configured Cloudflare DNS so `muhyadinelmi.com` resolved to the instance's public IPv4 address.
+## 1) Project Overview
+
+For this CoderCo networking project, I deployed NGINX on an Ubuntu EC2 instance, controlled inbound access with an AWS security group, and connected the server to my own domain using Cloudflare DNS.
+
+The goal was to understand the full request path end to end: how a domain resolves to an IP address, how traffic reaches the EC2 instance, how access is filtered, and how NGINX responds to the HTTP request.
 
 **Domain:** `muhyadinelmi.com`  
 **AWS region:** London (`eu-west-2`)  
@@ -13,85 +17,115 @@ For the CoderCo Networking project, I deployed NGINX on an Ubuntu EC2 instance, 
 **DNS provider:** Cloudflare  
 **Protocol:** HTTP (TCP port 80)
 
-> **Project status:** The deployment was tested successfully and the evidence is captured below. I later terminated the EC2 instance to avoid unnecessary ongoing infrastructure costs, so the live URL is no longer expected to serve this project.
+> **Project status:** The deployment was tested successfully and the evidence is captured below. The EC2 instance was later terminated to avoid unnecessary infrastructure costs, so the domain is no longer expected to serve this project.
 
-## How the components fit together
+## 2) Architecture
 
-The deployment had two separate stages: DNS resolution first, then the HTTP request to the server.
+The project has two separate stages: DNS resolution first, then the HTTP request to the server.
 
 ```text
-1. DNS lookup
+1. DNS resolution
 
 muhyadinelmi.com
         |
         v
-Cloudflare authoritative DNS (A record, DNS only)
+Cloudflare authoritative DNS
+(A record, DNS only)
         |
         v
-18.133.183.107  <- IP returned to the browser
+18.133.183.107
+EC2 public IPv4 returned to the client
 
-2. Web request (after DNS resolution)
 
-Browser -> 18.133.183.107:80
-                |
-                v
-         AWS VPC routing
-                |
-                v
-        AWS security group
-        (HTTP TCP 80 allowed)
-                |
-                v
-         Ubuntu EC2 instance
-         Private IP: 172.31.7.56
-                |
-                v
-              NGINX
-                |
-                v
-       Welcome to nginx!
+2. HTTP request
+
+Browser
+   |
+   | HTTP TCP 80
+   v
+18.133.183.107
+EC2 public IPv4
+   |
+   v
+AWS VPC routing
+   |
+   v
+Security Group
+HTTP TCP 80 allowed
+   |
+   v
+Ubuntu EC2 instance
+Private IPv4: 172.31.7.56
+   |
+   v
+NGINX
+   |
+   v
+Welcome to nginx!
 ```
 
-The key distinction is that **DNS finds the IP address; it does not carry the web page back to the browser**. After DNS resolution, the browser makes a separate HTTP request to the server.
+The important distinction is that **DNS resolves the domain name to an IP address; it does not deliver the web page**. Once the browser has the IP address, it makes a separate HTTP request to the server.
 
-## 1. Launching the EC2 instance
+## 3) Project Structure
 
-I launched an Ubuntu EC2 instance in the London region. The instance acted as a remote Linux server that I could administer from my own machine over SSH.
+```text
+networking/
+├── README.md
+└── screenshots/
+    ├── 01-ec2-instance.png
+    ├── 02-security-group.png
+    ├── 03-nginx-status.png
+    ├── 04-cloudflare-dns.png
+    └── 05-nginx-domain.png
+```
 
-I used the default VPC and an AWS-selected subnet. The instance had a private IPv4 address inside the VPC and an auto-assigned public IPv4 address for internet reachability. The public address only made the instance reachable when the VPC routing, security group rules and application configuration also allowed the traffic.
+The screenshots capture the EC2 configuration, security group rules, NGINX service status, Cloudflare DNS record and final browser test.
 
-| Setting | Value during deployment |
+## 4) Implementation
+
+### 4.1) Launching the EC2 Instance
+
+I launched an Ubuntu `t3.micro` instance in the London region using the default VPC and an AWS-selected subnet.
+
+The instance had two IPv4 addresses with different roles:
+
+| Address | Purpose |
 |---|---|
-| Instance name | `coderco-networking-webserver` |
-| Instance type | `t3.micro` |
-| Region | `eu-west-2` (London) |
-| Private IPv4 | `172.31.7.56` |
-| Public IPv4 | `18.133.183.107` |
+| Private IPv4: `172.31.7.56` | Communication inside the VPC |
+| Public IPv4: `18.133.183.107` | Internet reachability during the deployment |
+
+The public IPv4 address did not make every service automatically accessible. Traffic still depended on the VPC routing, security group rules and the application listening on the requested port.
 
 ![EC2 instance overview](screenshots/01-ec2-instance.png)
 
-I used my Windows computer to connect to the remote Ubuntu machine using SSH and a private key. The private key is **not** included in this repository.
+I connected to the server over SSH using a private key:
 
 ```bash
 ssh -i PATH_TO_PRIVATE_KEY.pem ubuntu@18.133.183.107
 ```
 
-## 2. Configuring network access
+The private key is **not** stored in this repository.
 
-The EC2 security group acted as a stateful virtual firewall for the instance and controlled permitted inbound connections:
+### 4.2) Controlling Network Access
+
+The EC2 security group acted as a stateful virtual firewall for the instance.
+
+I configured these inbound rules:
 
 | Purpose | Protocol | Port | Source |
 |---|---|---|---|
-| SSH administration | TCP | 22 | My public IP address only (`/32`) |
+| SSH administration | TCP | 22 | My public IP only (`/32`) |
 | Public web traffic | TCP | 80 | Anywhere IPv4 (`0.0.0.0/0`) |
 
-The SSH rule limited remote administration to my public IP, while the HTTP rule allowed visitors to reach NGINX on port 80 from the internet.
+SSH was restricted to my public IP because administrative access did not need to be open to the internet.
+
+HTTP was open on port 80 because the web server needed to accept public browser requests.
 
 ![EC2 security group inbound rules](screenshots/02-security-group.png)
 
-## 3. Installing and checking NGINX
+### 4.3) Installing and Testing NGINX
 
-After connecting to the Ubuntu server over SSH, I installed NGINX using APT and checked the service status.
+After connecting to the EC2 instance, I installed NGINX and checked that the service was running:
 
 ```bash
 sudo apt update
@@ -99,81 +133,119 @@ sudo apt install nginx
 sudo systemctl status nginx
 ```
 
-The service showed as `active (running)`, confirming that NGINX was running on the instance.
+The service returned `active (running)`, confirming that NGINX was running on the instance.
 
 ![NGINX service status](screenshots/03-nginx-status.png)
 
-Before adding DNS, I opened the instance's public IPv4 address over HTTP. The default **Welcome to nginx!** page loaded, confirming that NGINX and inbound HTTP access were working independently of the domain configuration.
+Before touching DNS, I opened the EC2 public IPv4 address directly over HTTP.
 
-Testing the server by IP first also gave me a clean troubleshooting boundary: if the IP worked but the domain did not, the next place to investigate was DNS rather than the web server.
+The default **Welcome to nginx!** page loaded successfully.
 
-## 4. Configuring Cloudflare DNS
+That test mattered because it proved the server, NGINX and inbound HTTP access were working independently of the domain. If the IP worked but the domain did not, DNS became the next place to investigate.
 
-I registered `muhyadinelmi.com` through Cloudflare and created an **A record** for the root domain pointing to the EC2 instance's public IPv4 address.
+### 4.4) Connecting the Domain with Cloudflare DNS
+
+I configured the root domain `muhyadinelmi.com` with an **A record** pointing to the EC2 public IPv4 address.
 
 | DNS setting | Value |
 |---|---|
 | Record type | `A` |
-| Name | `@` (root domain) |
+| Name | `@` |
 | IPv4 address | `18.133.183.107` |
-| Proxy status | **DNS only** (grey cloud) |
+| Proxy status | **DNS only** |
 | TTL | Auto |
 
-An A record maps a hostname to an IPv4 address. I used **DNS only** so clients would resolve the domain directly to the EC2 public IP rather than connect through Cloudflare's HTTP reverse proxy.
+An A record maps a hostname to an IPv4 address.
+
+I used Cloudflare's **DNS only** mode so the domain resolved directly to the EC2 public IP rather than sending HTTP traffic through Cloudflare's reverse proxy.
 
 ![Cloudflare A record](screenshots/04-cloudflare-dns.png)
 
-## 5. Verifying the result
+## 5) Verification
 
-Finally, I opened `http://muhyadinelmi.com` and saw the **Welcome to nginx!** page. That was the end-to-end check that the DNS record, public addressing, VPC routing, security group and NGINX service were working together.
+The final test was opening:
 
-I verified the result in the browser; I did not include a separate `nslookup` result in this project.
+```text
+http://muhyadinelmi.com
+```
+
+The browser displayed the **Welcome to nginx!** page.
+
+That confirmed the full path was working:
+
+```text
+Domain
+  -> DNS A record
+  -> EC2 public IPv4
+  -> VPC routing
+  -> Security Group
+  -> NGINX
+  -> HTTP response
+```
 
 ![NGINX website accessed through custom domain](screenshots/05-nginx-domain.png)
 
-The assessment deployment used **HTTP**, not HTTPS. HTTPS would require additional TLS configuration and was outside the scope of this build.
+This deployment used **HTTP**, not HTTPS. TLS/HTTPS configuration was outside the scope of this project.
 
-## Troubleshooting
+## 6) Troubleshooting
 
-### SSH key permissions on Windows
+### 6.1) SSH Key Permissions
 
-My initial SSH connection failed because the `.pem` private key file had permissions that were too broad. I placed a copy in my Windows `.ssh` directory, restricted access using Windows file permissions, and then connected successfully.
+**Problem:** My initial SSH connection failed because the `.pem` private key file permissions were too broad.
 
-This reinforced that having the correct private key is only part of SSH access; the client can also reject a key when its local file permissions are too open.
+**Fix:** I placed a copy in my Windows `.ssh` directory and restricted the local file permissions before reconnecting.
 
-### Connecting through AWS versus connecting directly
+**What it showed me:** Having the correct key is only part of SSH access. The SSH client can also reject a private key if its local permissions are too open.
 
-AWS's browser-based EC2 Instance Connect could not connect while SSH was restricted to my home public IP address. I used the SSH client on my own Windows computer instead, where the connection source matched the security group rule.
+### 6.2) EC2 Instance Connect vs Direct SSH
 
-That made source-based filtering much more concrete: a valid SSH service and key are not enough if the connection itself comes from an IP address the security group does not allow.
+**Problem:** AWS EC2 Instance Connect could not connect while port 22 was restricted to my home public IP.
 
-### APT package error
+**Fix:** I connected from my own machine using the SSH client, where the source IP matched the security group rule.
 
-My initial attempt to install NGINX returned a `404 Not Found` package-download error. Updating Ubuntu's package index with `sudo apt update` and then retrying the installation resolved it.
+**What it showed me:** Security group source rules apply to where the connection actually comes from. A valid key and a running SSH service are not enough if the source IP is not allowed.
 
-The issue was an outdated package index, not the security group or the EC2 instance itself, so updating the package metadata was the right fix.
+### 6.3) APT Package Error
 
-### Cloudflare DNS entry mistakes
+**Problem:** My initial NGINX installation returned a `404 Not Found` package-download error.
 
-During setup, I initially entered the wrong DNS name/value and briefly used Cloudflare's **Proxied** mode. I corrected the root record name to `@`, checked the full public IPv4 address (`18.133.183.107`), and switched to **DNS only**.
+**Fix:**
 
-Because the site already worked through the EC2 public IP, I knew the instance, security group and NGINX were working. That made it much easier to isolate the remaining problem to the DNS configuration.
+```bash
+sudo apt update
+sudo apt install nginx
+```
 
-## Learning notes
+Updating the package index before retrying resolved the issue.
 
-- An **A record** maps a hostname to an IPv4 address; DNS resolution and HTTP communication are separate steps.
-- An AWS **security group** is stateful and filters traffic using rules such as protocol, port and source.
-- A public IPv4 address can make an EC2 instance reachable from outside its VPC when the routing, security rules and application also permit the traffic. The instance still has a private address inside the VPC.
-- **NGINX** runs as a Linux service and can continue serving traffic independently of an open SSH session.
-- Testing the server through its public IP **before** connecting the domain makes DNS problems easier to isolate.
-- An **auto-assigned EC2 public IPv4 address** is not permanent and can change after a stop/start cycle, which would require the A record to be updated.
+**What it showed me:** The problem was package metadata, not the EC2 networking or security group configuration.
 
-## After the test: infrastructure cleanup
+### 6.4) Cloudflare DNS Configuration
 
-After capturing the working deployment and screenshots, I terminated the EC2 instance because I did not need to leave the practice server running. The URL is therefore **not a live demo anymore**.
+**Problem:** I initially entered the wrong DNS name/value and briefly used Cloudflare's **Proxied** mode.
 
-The Cloudflare domain is separate from the EC2 instance and remains registered. Any DNS record still pointing to the released public IP should be removed, and any leftover billable AWS resources, such as EBS volumes, should also be checked.
+**Fix:** I corrected the root record to `@`, verified the complete EC2 public IPv4 address and switched the record to **DNS only**.
+
+Because NGINX already worked through the public IP, I knew the server side was healthy. That let me isolate the remaining issue to DNS instead of changing unrelated parts of the setup.
+
+## 7) Key Learnings
+
+- **DNS and HTTP are separate stages.** DNS resolves the name; HTTP carries the web request and response.
+- **Public and private IPs have different jobs.** The private address belongs to the instance inside the VPC, while the public address provided internet reachability during this deployment.
+- **A public IP is not the same as open access.** Routing, security group rules and the listening application all affect whether traffic can reach a service.
+- **Security groups are stateful.** I could control inbound access by protocol, port and source while return traffic for an allowed connection was handled automatically.
+- **Testing in layers makes troubleshooting easier.** Confirming NGINX through the public IP before configuring DNS gave me a clear boundary between server problems and DNS problems.
+- **NGINX runs independently of the SSH session.** Closing my terminal did not stop the web server.
+- **Auto-assigned EC2 public IPv4 addresses are not permanent.** A stop/start can change the address, which would require the DNS A record to be updated.
+
+## 8) Infrastructure Cleanup
+
+After capturing the working deployment and screenshots, I terminated the EC2 instance because I did not need to keep the practice infrastructure running.
+
+The Cloudflare domain remains registered separately from the instance. Any DNS record still pointing to the released EC2 public IP should be removed, and leftover billable AWS resources should be checked after cleanup.
 
 ---
 
-**Result:** The deployment successfully served NGINX through my own domain and gave me a practical end-to-end example of how Linux, DNS, IP addressing, ports, security groups and HTTP fit together.
+## Result
+
+The deployment successfully served NGINX through my own domain and gave me a practical end-to-end example of how DNS, IP addressing, ports, security groups, Linux and HTTP work together in a real network path.
