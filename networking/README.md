@@ -2,7 +2,7 @@
 
 ## Project overview
 
-This was my first time using AWS. Until this project, I had never actually launched a cloud server. I wanted to understand how the networking I had been studying came together in practice: launching a remote Ubuntu machine, allowing traffic to reach it, running a web server, and connecting that server to my own domain.
+This project brought together the networking concepts I had been covering and applied them in a practical AWS deployment. Until this project, I had never actually launched a cloud server. I wanted to understand how the networking I had been studying came together in practice: launching a remote Ubuntu machine, allowing traffic to reach it, running a web server, and connecting that server to my own domain.
 
 For the CoderCo Networking project, I deployed NGINX on an AWS EC2 instance and configured Cloudflare DNS so I could open the website through `muhyadinelmi.com`.
 
