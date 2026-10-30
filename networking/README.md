@@ -4,16 +4,16 @@
 
 This project brought together the networking concepts I had been covering and applied them in a practical AWS deployment. I wanted to understand how the networking I had been studying came together in practice: launching a remote Ubuntu machine, allowing traffic to reach it, running a web server, and connecting that server to my own domain.
 
-For the CoderCo Networking project, I deployed NGINX on an AWS EC2 instance and configured Cloudflare DNS so I could open the website through `muhyadinelmi.com`.
+For this project, I deployed NGINX on an AWS EC2 instance and configured Cloudflare DNS so I could open the website through `muhyadinelmi.com`.
 
-**Domain:** `muhyadinelmi.com`  
-**AWS region:** London (`eu-west-2`)  
-**Server:** Ubuntu on Amazon EC2 (`t3.micro`)  
-**Web server:** NGINX  
-**DNS provider:** Cloudflare  
-**Protocol:** HTTP (TCP port 80)
+Domain: `muhyadinelmi.com`  
+AWS region: London (`eu-west-2`)  
+Server: Ubuntu on Amazon EC2 (`t3.micro`)  
+Web server: NGINX  
+DNS provider: Cloudflare  
+Protocol: HTTP (TCP port 80)
 
-> **Project status:** The deployment was tested successfully and the evidence is captured below. I subsequently terminated the EC2 instance to avoid unnecessary ongoing infrastructure costs, so the live URL is no longer expected to serve this project.
+> Project status: The deployment was tested successfully and the evidence is captured below. I subsequently terminated the EC2 instance to avoid unnecessary ongoing infrastructure costs, so the live URL is no longer expected to serve this project.
 
 ## How the components fit together
 
@@ -47,7 +47,7 @@ Browser -> 18.133.183.107:80
        Welcome to nginx!
 ```
 
-The distinction I wanted to get clear was that **DNS finds the IP address; it does not carry the web page back to the browser**. After DNS resolution, the browser makes a separate HTTP request to the server.
+The distinction I wanted to get clear was that DNS finds the IP address; it does not carry the web page back to the browser. After DNS resolution, the browser makes a separate HTTP request to the server.
 
 ## 1. Launching the EC2 instance
 
@@ -65,7 +65,7 @@ I used the default VPC and an AWS-selected subnet. The instance had a private IP
 
 ![EC2 instance overview](screenshots/01-ec2-instance.png)
 
-I used my Windows computer to connect to the remote Ubuntu machine using SSH and a private key. The private key is **not** included in this repository.
+I used my Windows computer to connect to the remote Ubuntu machine using SSH and a private key. The private key is not included in this repository.
 
 ```bash
 ssh -i PATH_TO_PRIVATE_KEY.pem ubuntu@18.133.183.107
@@ -98,33 +98,33 @@ The service status showed `active (running)` and `enabled`, indicating NGINX was
 
 ![NGINX service status](screenshots/03-nginx-status.png)
 
-Before adding DNS, I opened the instance's public IPv4 address using HTTP. The default **Welcome to nginx!** page loaded, confirming that NGINX and inbound HTTP access worked independently of the domain configuration.
+Before adding DNS, I opened the instance's public IPv4 address using HTTP. The default Welcome to nginx! page loaded, confirming that NGINX and inbound HTTP access worked independently of the domain configuration.
 
 ## 4. Configuring Cloudflare DNS
 
-I registered my own domain, `muhyadinelmi.com`, through Cloudflare. Then I created an **A record** for the root domain to point at my EC2 instance. This was the part where the server stopped being just an IP address I had to remember.
+I registered my own domain, `muhyadinelmi.com`, through Cloudflare. Then I created an A record for the root domain to point at my EC2 instance. This was the part where the server stopped being just an IP address I had to remember.
 
 | DNS setting | Value |
 |---|---|
 | Record type | `A` |
 | Name | `@` (root domain) |
 | IPv4 address | `18.133.183.107` |
-| Proxy status | **DNS only** (grey cloud) |
+| Proxy status | DNS only (grey cloud) |
 | TTL | Auto |
 
-An A record maps a hostname to an IPv4 address. I chose **DNS only** so that clients would resolve the domain directly to the EC2 public IP rather than connect through Cloudflare's HTTP reverse proxy.
+An A record maps a hostname to an IPv4 address. I chose DNS only so that clients would resolve the domain directly to the EC2 public IP rather than connect through Cloudflare's HTTP reverse proxy.
 
 ![Cloudflare A record](screenshots/04-cloudflare-dns.png)
 
 ## 5. Verifying the result
 
-Finally, I opened `http://muhyadinelmi.com` and saw the **Welcome to nginx!** page. Seeing that page under my own domain was the end-to-end check: the DNS configuration, public address, security group and NGINX server were working together.
+Finally, I opened `http://muhyadinelmi.com` and saw the Welcome to nginx! page. Seeing that page under my own domain was the end-to-end check: the DNS configuration, public address, security group and NGINX server were working together.
 
 I verified this in the browser; I have not included a separate `nslookup` result in this project.
 
 ![NGINX website accessed through custom domain](screenshots/05-nginx-domain.png)
 
-The assessment deployment used **HTTP**, not HTTPS. HTTPS would require additional TLS configuration; it was not part of this build.
+The assessment deployment used HTTP, not HTTPS. HTTPS would require additional TLS configuration; it was not part of this build.
 
 ## Problems I ran into
 
@@ -142,21 +142,21 @@ My initial attempt to install NGINX returned a `404 Not Found` package-download 
 
 ### Cloudflare DNS entry mistakes
 
-During setup, I initially entered the wrong DNS name/value and briefly used Cloudflare's **Proxied** mode. I corrected the root record name to `@`, checked the full public IPv4 address (`18.133.183.107`), and switched to **DNS only**. Because the site already worked through the EC2 public IP, I knew NGINX was running. That made it much easier to focus on the DNS record instead of changing the server.
+During setup, I initially entered the wrong DNS name/value and briefly used Cloudflare's Proxied mode. I corrected the root record name to `@`, checked the full public IPv4 address (`18.133.183.107`), and switched to DNS only. Because the site already worked through the EC2 public IP, I knew NGINX was running. That made it much easier to focus on the DNS record instead of changing the server.
 
 ## Learning notes
 
-- An **A record** maps a hostname to an IPv4 address; DNS resolution and HTTP communication are separate steps.
-- An AWS **security group** filters traffic by protocol, port, and source, including SSH on port 22 and HTTP on port 80.
+- An A record maps a hostname to an IPv4 address; DNS resolution and HTTP communication are separate steps.
+- An AWS security group filters traffic by protocol, port, and source, including SSH on port 22 and HTTP on port 80.
 - A public IPv4 address makes a cloud server reachable from outside its VPC when routes, security rules, and the application permit it. The instance also has a private address inside the VPC.
-- **NGINX** is a web server running as a Linux service. It can continue serving traffic independently of an open SSH session.
-- Testing the server through its IP **before** connecting the domain makes DNS problems easier to isolate.
-- An **auto-assigned EC2 public IPv4** is not a permanent address and can change after a stop/start cycle, requiring an A-record update.
+- NGINX is a web server running as a Linux service. It can continue serving traffic independently of an open SSH session.
+- Testing the server through its IP before connecting the domain makes DNS problems easier to isolate.
+- An auto-assigned EC2 public IPv4 is not a permanent address and can change after a stop/start cycle, requiring an A-record update.
 
 ## After the test: infrastructure cleanup
 
-After I had captured the working deployment and screenshots, I terminated the EC2 instance because I did not need to leave this practice server running. That means the URL is **not a live demo anymore**. My Cloudflare domain is separate from the instance and remains registered. The old A record needs removing if it still points to the released IP, and I should check for any leftover billable AWS resources, including EBS volumes.
+After I had captured the working deployment and screenshots, I terminated the EC2 instance because I did not need to leave this practice server running. That means the URL is not a live demo anymore. My Cloudflare domain is separate from the instance and remains registered. The old A record needs removing if it still points to the released IP, and I should check for any leftover billable AWS resources, including EBS volumes.
 
 ---
 
-**Result:** My AWS-hosted NGINX site worked through my own domain. More importantly, I now have a practical example of how Linux, ports, security groups, public/private IPs and DNS fit together.
+Result: My AWS-hosted NGINX site worked through my own domain. More importantly, I now have a practical example of how Linux, ports, security groups, public/private IPs and DNS fit together.
