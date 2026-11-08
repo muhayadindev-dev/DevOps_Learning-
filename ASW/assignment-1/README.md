@@ -1,12 +1,25 @@
-# Assignment 1 — VPC, subnet routing and EC2 networking
+# Assignment 1 — Building a VPC from scratch
 
-## 1) Project overview
+[← THREADX overview](../README.md) · [Assignment 2 →](../assignment-2/README.md)
 
-CoderCo asked for a custom VPC with a public and private subnet, an Internet Gateway, a NAT Gateway in the public subnet, route tables for each subnet, and EC2 instances to demonstrate public/private placement. I used the THREADX naming scheme in `eu-west-2` and built the networking by hand to understand each dependency.
+## 1. What I was trying to build
 
-**What I set out to prove:** a subnet's name does not make it public; **route tables** determine the path, while a host's public IP, security group, service and credentials determine whether a specific connection can work.
+The CoderCo task was to create the foundations of a VPC network: public and private subnets, an Internet Gateway (IGW), a NAT Gateway, route tables and EC2 instances. I built it in **London (`eu-west-2`)** using the name **THREADX**.
 
-## 2) Architecture
+This is the assignment where I had to slow down. I knew the words VPC, subnet, route table and public IP, but I was still mixing up what each one actually did. I wanted to finish with a network I could explain, not just a list of AWS resources.
+
+| Component | My configuration |
+|---|---|
+| VPC | `THREADX_VPC` — `10.0.0.0/16` |
+| Public subnet | `pub-threadx` — `10.0.0.0/24` — `eu-west-2a` |
+| Private subnet | `piv-threadX` — `10.0.1.0/24` — `eu-west-2a` |
+| Internet Gateway | `ig-threadX` attached to the VPC |
+| Public route table | `10.0.0.0/16 → local` and `0.0.0.0/0 → IGW` |
+| Private route table | `10.0.0.0/16 → local` and `0.0.0.0/0 → NAT` while NAT existed |
+| NAT Gateway | `ng-threadX`, zonal/public, with Elastic IP; later deleted |
+| Instances | Public EC2, private EC2 without public IPv4, public bastion EC2 |
+
+## 2. How I designed the network
 
 ```mermaid
 flowchart TB
@@ -32,107 +45,100 @@ flowchart TB
   PublicEC2 -. "planned SSH hop\nnot proven end to end" .-> PrivateEC2
 ```
 
-The dashed lines distinguish a configured route or planned bastion connection from a successful recorded end-to-end test. **A route table is not a server in an Availability Zone.**
+A packet addressed to another private IP inside `10.0.0.0/16` matches the **local** route. Traffic to destinations outside the VPC needs an appropriate next hop. The public subnet's default route went to the IGW. The private subnet's default route went to the NAT Gateway **while that NAT existed**.
 
-## 3) Main configuration
+My biggest early mistake was thinking an EC2 is publicly accessible simply because it's in a subnet called “public”. The subnet needs an IGW route, but for direct IPv4 access the instance also needs a public address, an allowing security group, and a program actually listening on the destination port.
 
-| Resource | Lab value / decision |
-|---|---|
-| VPC | `THREADX_VPC` — `10.0.0.0/16` |
-| Public subnet | `pub-threadx` — `10.0.0.0/24`, `eu-west-2a` |
-| Private subnet | `piv-threadX` — `10.0.1.0/24`, `eu-west-2a` |
-| Internet Gateway | `ig-threadX`, attached to the THREADX VPC |
-| Public route table | `RouteT-Pub-threadX`: local route plus `0.0.0.0/0` → IGW |
-| Private route table | `RouteT-priv-threadX`: local route plus `0.0.0.0/0` → NAT while NAT existed |
-| NAT Gateway | `ng-threadX`, **public / zonal**, hosted in the public subnet; later deleted |
-| Elastic IP | Allocated to NAT, then **released** |
-| EC2 | Public EC2, private EC2 without public IP, and a public bastion instance |
-| Storage | EC2 root volumes used EBS gp3 (not a separate EFS service) |
+## 3. Building it in the AWS Console
 
-Each `/24` contains 256 total IPv4 addresses, **251 available within AWS** after AWS reserves five. The two `/24` subnets are nonoverlapping parts of the parent `/16`.
+### VPC and subnet ranges
 
-## 4) Build steps and the decisions behind them
+**Console:** VPC → Your VPCs → Create VPC → **VPC only**. I chose the manual route so I could connect the resources myself. Then I went to **Subnets → Create subnet**, selected the THREADX VPC and allocated the two `/24` networks.
 
-### 4.1) VPC and subnets
+`10.0.0.0/16` is the parent range. `10.0.0.0/24` and `10.0.1.0/24` are two different ranges *inside* it. Each `/24` contains 256 IPv4 addresses in theory; AWS reserves five per subnet, so **251 are available** for use.
 
-**Console:** VPC → Your VPCs → Create VPC → *VPC only*. The manual option mattered because I wanted to create and connect the other resources individually, not let the wizard build everything for me. After creation, I checked the VPC ID instead of assuming a resource name was sufficient.
+I initially made CIDR mistakes and sometimes looked at resources from the default VPC, where I saw `172.31.x.x` addresses. The practical fix was to verify the **VPC ID** and actual CIDR, not rely on the name or assume the Console was showing the right network.
 
-**Console:** VPC → Subnets → Create subnet. I chose the THREADX VPC, the AZ, and two nonoverlapping CIDR blocks. My old default VPC used `172.31.x.x`; seeing those ranges in a list did **not** mean THREADX's subnets were missing. I filtered by the selected VPC.
+### Internet Gateway and route tables
 
-### 4.2) Internet Gateway and routing
+**Console:** VPC → Internet gateways → Create → **Attach to VPC**. Creating the gateway and attaching it were separate steps. Then **Route tables → Create route table → Routes → Edit routes**.
 
-**Console:** Internet gateways → Create internet gateway → Actions → Attach to VPC. **Creating** the IGW and **attaching** it are separate operations; neither by itself adds `0.0.0.0/0` to a subnet's route table.
+I had to get one distinction straight:
 
-**Console:** Route tables → Create route table (choose VPC) → Routes → Edit routes → Add route. Then **Subnet associations → Edit subnet associations**. I learned to distinguish these questions:
+- **Routes** answer “where should traffic destined for this IP range go?”
+- **Subnet associations** answer “which subnets use this route table?”
 
-- **Routes:** Which next hop should packets use for a destination prefix?
-- **Associations:** Which subnets follow this particular set of routes?
-- **Local route:** `10.0.0.0/16 → local` matches traffic destined for addresses inside the VPC, including another subnet; it is not the IP of one instance.
+I associated the public subnet with the IGW table and the private subnet with the NAT table. I also learned that an unassociated subnet still has the VPC's main route table; it doesn't have “no routing”.
 
-The public subnet was explicitly associated with the public route table, and the private subnet with the private route table.
+**Evidence — [open my route-table screenshot](screenshots/01-vpc-route-tables.webp).** This shows the recorded private route configuration. It proves the route existed, **not** that a private-instance internet test succeeded.
 
-![Private route table showing local and NAT routes](screenshots/01-vpc-route-tables.webp)
+### NAT Gateway and Elastic IP
 
-*Evidence 1 — The private route table was configured with local routing and a NAT default route. It is not a successful egress test.*
+**Console:** EC2 → Elastic IPs → Allocate; then VPC → NAT Gateways → Create NAT Gateway. I selected **Zonal**, **public connectivity**, the public subnet and the EIP.
 
-### 4.3) NAT and EIP
+The point of the NAT Gateway was to give a private instance a route for **outbound IPv4 internet connections** without giving the instance a public IPv4 address. The gateway doesn't turn the private instance into a publicly reachable web server.
 
-**Console:** EC2 → Elastic IPs → Allocate; VPC → NAT gateways → Create NAT gateway. I chose **Zonal**, selected the public subnet and the allocated EIP, and observed the NAT move to **Available**. A private EC2 can use a NAT path only when its associated route table points to that gateway and other relevant conditions permit egress.
+**Evidence — [open my NAT configuration screenshot](screenshots/03-nat-configuration.webp).** This image shows the choices I made during creation. The gateway later reached **Available** in the Console, but the screenshot itself is a configuration view.
 
-![Creation settings for a public zonal NAT Gateway](screenshots/03-nat-configuration.webp)
+I deleted the NAT Gateway and released its EIP once the exercise was finished. Leaving an old private route pointing at a deleted NAT does **not** mean private egress still works.
 
-*Evidence 2 — NAT gateway creation settings (zonal, public subnet, Elastic IP). The screenshot does not show the later Available status.*
+### EC2 instances and the bastion
 
-**Cost note:** I deliberately deleted the NAT Gateway and released the EIP after the lab. The previously saved private default route is therefore not a functioning internet route today.
+**Console:** EC2 → Instances → Launch instances → Network settings. The most important part of this step for me was selecting **THREADX VPC first**, then the appropriate subnet and public-IP choice.
 
-### 4.4) EC2 and bastion security
-
-**Console:** EC2 → Instances → Launch instances → Network settings → choose **THREADX VPC and the correct subnet**. The private instance had an internal address but no public IPv4.
-
-![Private EC2 details with no public IPv4](screenshots/02-private-ec2-no-public-ip.webp)
-
-*Evidence 3 — Private IPv4 assigned, public IPv4 absent. Bastion SSH and private egress were not tested end-to-end.* For administration I set up a bastion path:
+I created a public-facing EC2, a private EC2 without a public IPv4, and a bastion instance in the public network for the intended SSH path. The bastion idea was:
 
 ```text
-Mac SSH client -> bastion public IPv4:22
-bastion SSH client -> private EC2 private IPv4:22
+My Mac --SSH/22--> bastion public address
+Bastion --SSH/22--> private EC2 private address
 ```
 
-Security groups allowed the intended SSH flows. They did **not** automatically forward a connection; SSH from the bastion must initiate the second connection. **That second hop was not actually verified as a completed SSH session.** No private-instance internet egress `curl` result was retained either.
+A security group permitting port 22 is not itself a tunnel. The second SSH connection has to happen from the bastion to the private host. I configured the path but **did not capture a successful end-to-end SSH session** into the private EC2.
 
-## 5) Verification and evidence
+**Evidence — [open my private EC2 screenshot](screenshots/02-private-ec2-no-public-ip.webp).** It shows the EC2 address details after launch, including the absence of a public IPv4. That is what the image proves; it is not a successful SSH screenshot.
 
-| Check | Observation | Confidence |
+### A basic EC2 bootstrap example
+
+For a future replay, I added a small [public EC2 NGINX user-data example](user-data/public-ec2-nginx-example.sh) using Ubuntu/`apt`. **This is a reconstructed example**, not a claim that I ran this exact script during Assignment 1. It gives me a repeatable way to put a basic test webpage on a public Ubuntu EC2:
+
+```bash
+#!/bin/bash
+set -e
+apt-get update -y
+DEBIAN_FRONTEND=noninteractive apt-get install -y nginx
+systemctl enable --now nginx
+echo '<h1>THREADX public EC2 test</h1>' > /var/www/html/index.html
+```
+
+User data is a bootstrapping mechanism; it doesn't configure VPC routes, allocate a public IP or open the security group. That distinction matters. The **actual captured** App 2 user-data script is in [Assignment 2](../assignment-2/user-data/app2-bootstrap.sh).
+
+## 4. What went wrong
+
+**I chose the wrong VPC for an EC2.** Seeing a `172.31.x.x` address made me check which VPC I had launched it into. I needed to stop treating names as proof and check the network configuration itself.
+
+**I was confusing address counts with ranges.** I could remember that a `/24` has 256 addresses, but I still got tripped up on counting from zero, usable addresses, and how the parent `/16` can hold multiple `/24` subnets. That's revision material, not something I want to pretend was effortless.
+
+**I kept looking at routes and associations like they were the same setting.** They aren't. Writing the route is one operation; associating the subnet is another.
+
+**I overestimated what a public subnet does.** A route to an IGW doesn't bypass a security group, start SSH, or assign a public IPv4 to the EC2.
+
+## 5. How I verified it
+
+| Check | What I actually saw | Result |
 |---|---|---|
-| VPC/subnet CIDRs | Confirmed in AWS Console | Configured/observed |
-| Public vs private routes | Public IGW and private NAT default routes present before cleanup | Configured/observed |
-| NAT | Status `Available` before deletion | Observed |
-| Private EC2 | No public IPv4 shown | Observed |
-| Bastion-to-private SSH | Security groups and path designed | **Not end-to-end tested** |
-| Private outbound internet | NAT/routing configured | **Not end-to-end tested** |
+| VPC, subnets and CIDRs | Correct THREADX network ranges in the Console | Configured |
+| Route tables | Public default route to IGW; private default route to NAT | Configured |
+| NAT Gateway | Available before deleting it | Observed |
+| Private EC2 | Private IPv4 present, public IPv4 absent | Observed |
+| Bastion → private SSH | Security group rules and intended path | **Not verified end to end** |
+| Private EC2 → internet | NAT path planned/configured | **Not verified end to end** |
 
-**Curated visual proof (3 screenshots, not every screen):** [evidence plan](screenshots/README.md). The final screenshot set is curated separately from console navigation logs.
+I would rather leave those last two unchecked than write a good-looking README that claims something I cannot demonstrate.
 
-## 6) Challenges and corrections
+## 6. What I learnt and what I want to improve
 
-**Wrong VPC selected when launching EC2.** An earlier instance landed in the pre-existing/default VPC. I recognised the `172.31.x.x` private address and checked the VPC ID. The correction was to explicitly select THREADX in the launch wizard.
+I finished with a much better picture of **subnet CIDR → route table association → next hop → EC2 address → security group**. The things that still need repetition are CIDR calculations, tracing routing decisions on my own, then proving both an SSH bastion hop and private outbound connectivity in a clean new lab.
 
-**Subnet CIDR confusion.** A subnet must fit within the parent `10.0.0.0/16` and not overlap another subnet. `10.0.0.0/24` and `10.0.1.0/24` satisfy that. AWS's usable addresses are not the same as the mathematical total.
+**Cleanup:** NAT Gateway and EIP deleted to avoid further charges; EC2 instances stopped after the lab. Stopped EC2 can still leave billable EBS storage.
 
-**Route table vs subnet association.** Seeing “subnets without explicit associations” meant they still used the main route table. The fix was to associate each subnet deliberately with its intended table, not assume routes apply based on names.
-
-**Assuming public subnet means public EC2 address.** Public routing via IGW is necessary, but an EC2 instance also needs a public IPv4/EIP for direct IPv4 internet reachability; appropriate inbound rules and a listening service also matter. Private `10.x.x.x` remains the interface's internal identity.
-
-**Bastion vs reverse proxy.** Allowing SSH on security groups does not make an EC2 automatically relay web or SSH traffic. A second SSH connection must be actively established to the private IP.
-
-## 7) What I learned / what I would retest
-
-- **Strongest:** VPC/subnet address containment, IGW attachment, and the importance of checking the selected VPC; repeated subnet/routing work improved confidence.
-- **Needs more independent practice:** CIDR maths, `local` vs default route matching, and choosing route-table associations without prompts.
-- **Still to prove hands-on:** complete SSH via bastion to private host and a confirmed private-instance outbound connection with a temporary NAT gateway.
-
-## 8) Cleanup and reproduction
-
-NAT and EIP were deleted to reduce charges. Practice EC2 instances were stopped, not all terminated; EBS volumes remain relevant to costs. There is no Terraform script here. Reproduction requires recreating or checking the NAT before claiming that private egress works.
-
-[← AWS overview](../README.md)
+[← THREADX overview](../README.md)

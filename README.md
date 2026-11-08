@@ -26,4 +26,4 @@ The [Networking section](networking/README.md) covers an earlier EC2, NGINX and 
 
 ## AWS Infrastructure — THREADX (three assignments)
 
-The [AWS section](ASW/README.md) contains three CoderCo labs in one project: VPC/public-private networking, ALB and Auto Scaling, then S3 static website hosting with CloudFront, ACM and Route 53. Each assignment has its own architecture Mermaid diagram, implementation walkthrough, verification boundary, incident notes and screenshot-selection guide. The Assignment 2 folder also includes the captured NGINX EC2 user-data script.
+The [AWS section](ASW/README.md) contains three CoderCo labs in one project: VPC/public-private networking, ALB and Auto Scaling, then S3 static website hosting with CloudFront, ACM and Route 53. Each assignment has its own architecture Mermaid diagram, implementation walkthrough, verification boundary, incident notes and linked evidence in the same README. The Assignment 2 folder also includes the captured NGINX EC2 user-data script.
