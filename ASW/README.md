@@ -41,4 +41,4 @@ These are snapshots from **6–8 November 2026**. After the tests, I removed the
 
 ## Architecture reference (optional)
 
-The three READMEs already contain their own diagrams. For a side-by-side architecture-only view, see **[the Mermaid architecture reference](architecture.md)**.
+The three READMEs already contain their own diagrams. For a side-by-side architecture-only view, see **[the Mermaid architecture reference](zz-architecture.md)**.
