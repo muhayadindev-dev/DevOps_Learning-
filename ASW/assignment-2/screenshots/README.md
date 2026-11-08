@@ -1,9 +1,11 @@
-# Assignment 2 — Screenshot selection
+# Assignment 2 — Visual Evidence
 
-**Curated evidence selects three actual historical captures.** The cropped WebP images have been committed to this GitHub folder..
+Three real lab screenshots are committed here, with each embedded beside the appropriate passage in the [Assignment 2 README](../README.md).
 
-1. `01-alb-three-healthy-targets.png` — ALB resource map showing three HTTP targets marked healthy at that moment.
-2. `02-nginx-unhealthy-service-recovery.png` — EC2 terminal showing `nginx.service` **inactive (dead)** and **disabled**, followed by `sudo systemctl enable --now nginx`. Evidence of a real troubleshooting decision, not a generic screenshot.
-3. `03-asg-template-version-2.png` — Auto Scaling Group settings showing the `Default` launch-template version reference and scaled-down capacity, not five running instances.
+| Evidence | What the screenshot actually proves | Limitation |
+|---|---|---|
+| [01 — ALB healthy targets](01-alb-three-healthy-targets.webp) | ALB resource map reported **three healthy HTTP targets** | A health check is not a complete application functional test |
+| [02 — NGINX recovery](02-nginx-unhealthy-service-recovery.webp) | Terminal displayed NGINX inactive/disabled and the attempt to enable/start with `systemctl` | Health was confirmed later through ALB and responses |
+| [03 — ASG configuration](03-asg-template-version-2.webp) | Auto Scaling Group settings, Default launch-template selection and scaled-down configuration | Doesn't prove five instances ran merely because "5" is in the ASG name |
 
-The alternating App 1/App 2 `curl` results are recorded in the README from the lab, but a separate terminal screenshot of both was **not selected** for this iteration. The ALB has since been deleted. Review crops for account identifiers before publication.
+Repeated `curl` responses identifying App 1 and App 2 were recorded in the test notes of the parent README. The ALB was later deleted and the ASG scaled down, so these are **historical** screenshots.

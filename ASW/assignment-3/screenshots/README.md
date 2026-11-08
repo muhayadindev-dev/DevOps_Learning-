@@ -1,9 +1,11 @@
-# Assignment 3 — screenshot selection (Iteration 1)
+# Assignment 3 — Visual Evidence
 
-Keep this section to three strong pieces of proof, rather than every AWS Console page.
+Three original screenshots document the full S3 → CloudFront verification, embedded inline in the [Assignment 3 README](../README.md).
 
-1. `01-cloudfront-cache-hit.png` — Mac terminal `curl -I https://threadx.muhyadinelmi.com` returning `HTTP/2 200`, `x-cache: Hit from cloudfront` and CloudFront `via`.
-2. `02-invalidation-completed.png` — CloudFront invalidation details showing **Completed** for `/*`.
-3. `03-updated-https-storefront.png` — browser address bar `threadx.muhyadinelmi.com` with the revised metallic-grey THREADX storefront.
+| Evidence | What the screenshot actually proves |
+|---|---|
+| [01 — CloudFront cache hit](01-cloudfront-cache-hit.webp) | `curl -I` returned `HTTP/2 200`, `x-cache: Hit from cloudfront` and CloudFront response headers |
+| [02 — Completed invalidation](02-invalidation-completed.webp) | CloudFront marked the wildcard `/*` invalidation **Completed** |
+| [03 — Updated HTTPS storefront](03-updated-https-storefront.webp) | Metallic-grey THREADX website loaded using the custom hostname `threadx.muhyadinelmi.com` |
 
-For the screenshot of the website, confirm you're on the **custom HTTPS domain**, not the `s3-website` HTTP endpoint. Public screenshots should be cropped/redacted.
+The website screenshot uses the **custom domain**, not the direct S3 website endpoint. The screenshot shows the application as it appeared at test time; it does not prove that a CI/CD pipeline or continuously running production service exists.

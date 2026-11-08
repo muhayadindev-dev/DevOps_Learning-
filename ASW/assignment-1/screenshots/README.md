@@ -1,9 +1,11 @@
-# Assignment 1 — Screenshot selection
+# Assignment 1 — Visual Evidence
 
-**Curated evidence selects three actual historical captures.** The genuine screenshot PNGs are curated in the separate media upload package and are **not yet in this GitHub folder**. Do not mistake the manifest for an uploaded image.
+Three cropped, original lab screenshots are committed in this directory and embedded beside the corresponding explanations in the [Assignment 1 README](../README.md). They were converted to WebP to keep the GitHub project lean while preserving the visible console evidence.
 
-1. `01-vpc-route-tables.png` — private route-table view confirming local and NAT default route **configuration** at lab time, not a successful outbound connection.
-2. `02-private-ec2-no-public-ip.png` — private EC2 details showing no public IPv4.
-3. `03-nat-configuration.png` — NAT Gateway creation settings selecting Zonal, public connectivity, the public subnet and EIP; this is **not** an Available-state screenshot.
+| Evidence | What the screenshot actually proves | Limitation |
+|---|---|---|
+| [01 — Private route table](01-vpc-route-tables.webp) | Private routing configured with local and NAT default routes at that point in the lab | Not a private EC2 internet egress test |
+| [02 — Private EC2](02-private-ec2-no-public-ip.webp) | Private IPv4 shown; public IPv4 not assigned | Not a successful bastion SSH connection |
+| [03 — NAT configuration](03-nat-configuration.webp) | Zonal NAT creation input, public subnet and EIP selection | **This image is a configuration screen**, not an Available-status screenshot |
 
-The NAT was subsequently deleted. All images should be reviewed for account/personal information before publication.
+The NAT gateway was later deleted and its Elastic IP released. The screenshots are historical.

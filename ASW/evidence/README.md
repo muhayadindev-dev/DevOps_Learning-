@@ -1,23 +1,15 @@
-# Evidence map — THREADX AWS Assignments 1–3
+# THREADX — Evidence Index
 
-## Published evidence
+Nine **real, cropped lab screenshots** are published in the three assignment screenshot directories. Each image is embedded **next to the specific configuration or test it supports**, with a technically limited caption. The optimised WebP files are compressed copies of the recorded screenshots, not illustrative mock-ups.
 
-The **README files, diagrams, captured App 2 user-data and this evidence manifest** are committed. Nine real screenshot images are published as WebP files. **Do not claim images are published in GitHub until those PNGs are added.**
-
-Use a few screenshots for defensible facts, not every AWS Console page visited. These are historical lab captures; some infrastructure no longer exists.
-
-| Assignment | Selected screenshot | What it proves | Limit |
+| Project | Proof 1 | Proof 2 | Proof 3 |
 |---|---|---|---|
-| 1 | VPC private route-table view | Route table entries were configured | Not a private outbound `curl` test |
-| 1 | Private EC2 details | Instance had no public IPv4 | Not a successful bastion SSH test |
-| 1 | NAT setup configuration | Zonal NAT/public subnet/EIP choices | Screenshot shows configuration, not an Available-state proof |
-| 2 | ALB resource map | Three registered HTTP targets marked healthy | Health checking, not entire app test |
-| 2 | EC2 `systemctl` terminal | NGINX was inactive/disabled; `enable --now` was run | Follow-up ALB health was checked separately |
-| 2 | ASG configuration | Launch template referenced through Default, capacity settings | Does not prove five instances ran |
-| 3 | Terminal `curl -I` | HTTPS request `200`, `x-cache: Hit from cloudfront` | Cached response observed at that time |
-| 3 | Completed invalidation | `/*` reached **Completed** | Must additionally check website content changed |
-| 3 | Final custom-domain storefront | Updated metallic-grey website at THREADX address | The image is a browser result, not automatic CI/CD proof |
+| [Assignment 1](../assignment-1/README.md) | [Private routing](../assignment-1/screenshots/01-vpc-route-tables.webp) | [Private EC2 addressing](../assignment-1/screenshots/02-private-ec2-no-public-ip.webp) | [NAT creation configuration](../assignment-1/screenshots/03-nat-configuration.webp) |
+| [Assignment 2](../assignment-2/README.md) | [ALB three healthy targets](../assignment-2/screenshots/01-alb-three-healthy-targets.webp) | [NGINX inactive → enable/start](../assignment-2/screenshots/02-nginx-unhealthy-service-recovery.webp) | [ASG settings](../assignment-2/screenshots/03-asg-template-version-2.webp) |
+| [Assignment 3](../assignment-3/README.md) | [CloudFront cache hit](../assignment-3/screenshots/01-cloudfront-cache-hit.webp) | [Completed invalidation](../assignment-3/screenshots/02-invalidation-completed.webp) | [Updated custom HTTPS site](../assignment-3/screenshots/03-updated-https-storefront.webp) |
 
-**Further evidence in text:** repeated ALB `curl` returned App 1 and App 2, and Route 53 authoritative `dig` distinguished DNS caching from missing records. These are documented in the relevant assignment README; not every text-only observation has an accompanying PNG.
+**How to read the evidence:** a route shown in the AWS Console is configured routing; it is not proof of successful private outbound traffic. Healthy ALB targets demonstrate success of the target-group health check, not full application correctness. A completed invalidation proves the cache entries were invalidated; the browser screenshot separately verifies updated content appeared.
 
-Screenshot paths and filenames are documented in the individual `assignment-X/screenshots/README.md` files. Before uploading to this public repository, manually check every crop for account identifiers, personal names, unrelated tabs and secrets.
+Additional **command-based evidence** is described in the relevant README: the ALB alternated between App 1/App 2 responses, and DNS testing queried both authoritative and public recursive resolvers. Those findings are documented without manufacturing extra terminal screenshots.
+
+**Lifetime:** These screenshots are from 6–8 November 2026. NAT/EIP and ALB were later deleted and the ASG capacity reduced to zero. This is a portfolio record of a temporary learning lab, not a claim of permanently deployed infrastructure.
