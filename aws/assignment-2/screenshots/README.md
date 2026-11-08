@@ -1,9 +1,9 @@
-# Assignment 2 — screenshot selection (Iteration 1)
+# Assignment 2 — Screenshot selection
 
-Use **three** images, with technically honest captions. Crop/redact account identifiers and unrelated browser tabs.
+**Iteration 1 selects three actual historical captures.** Cropped PNGs are packaged separately and **not yet uploaded to this GitHub folder**.
 
-1. `01-alb-three-healthy-targets.png` — ALB resource map showing three healthy HTTP targets.
-2. `02-curl-alternating-apps.png` — terminal requests through ALB returning **App 1** and **App 2** markers. If using a screenshot, it must show both outputs; otherwise preserve the exact command/observations in README.
-3. `03-asg-template-version-2.png` — ASG default launch-template reference and capacity settings; **does not imply five live instances**.
+1. `01-alb-three-healthy-targets.png` — ALB resource map showing three HTTP targets marked healthy at that moment.
+2. `02-nginx-unhealthy-service-recovery.png` — EC2 terminal showing `nginx.service` **inactive (dead)** and **disabled**, followed by `sudo systemctl enable --now nginx`. Evidence of a real troubleshooting decision, not a generic screenshot.
+3. `03-asg-template-version-2.png` — Auto Scaling Group settings showing the `Default` launch-template version reference and scaled-down capacity, not five running instances.
 
-The ALB has since been deleted, so all screenshots are historical. The exact App 2 user-data script is stored under `../user-data/`.
+The alternating App 1/App 2 `curl` results are recorded in the README from the lab, but a separate terminal screenshot of both was **not selected** for this iteration. The ALB has since been deleted. Review crops for account identifiers before publication.
