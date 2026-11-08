@@ -7,7 +7,7 @@ Three CoderCo AWS assignments built and troubleshot in the AWS Console, using th
 > **Historical lab evidence, not a permanent production environment.** The NAT gateway/EIP and Application Load Balancer were deleted after testing; the Auto Scaling Group was scaled to zero; several EC2 instances were stopped. The Assignment 3 distribution and website were verified on 8 November 2026. Live availability and bills can change after that date. This repository does not claim that all three architectures are running simultaneously.
 
 
-> **Screenshot publication status:** All nine real screenshots have been cropped, named and positioned beside the matching explanations in the three independent READMEs. The binary files are supplied in a companion ZIP because the GitHub write connector cannot upload PNG bytes; until those files are added, their GitHub image references will be empty. No synthetic screenshots have been substituted.
+> **Evidence:** Nine cropped, real screenshots from the labs are committed below as optimised WebP images, positioned next to the explanations they support. They are historical captures, not proof that every AWS resource is still running.
 
 ## 1. Project map and evidence
 

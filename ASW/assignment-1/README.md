@@ -71,7 +71,7 @@ Each `/24` contains 256 total IPv4 addresses, **251 available within AWS** after
 
 The public subnet was explicitly associated with the public route table, and the private subnet with the private route table.
 
-![Private route table showing local and NAT routes](screenshots/01-vpc-route-tables.png)
+![Private route table showing local and NAT routes](screenshots/01-vpc-route-tables.webp)
 
 *Evidence 1 — The private route table was configured with local routing and a NAT default route. It is not a successful egress test.*
 
@@ -79,7 +79,7 @@ The public subnet was explicitly associated with the public route table, and the
 
 **Console:** EC2 → Elastic IPs → Allocate; VPC → NAT gateways → Create NAT gateway. I chose **Zonal**, selected the public subnet and the allocated EIP, and observed the NAT move to **Available**. A private EC2 can use a NAT path only when its associated route table points to that gateway and other relevant conditions permit egress.
 
-![Creation settings for a public zonal NAT Gateway](screenshots/03-nat-configuration.png)
+![Creation settings for a public zonal NAT Gateway](screenshots/03-nat-configuration.webp)
 
 *Evidence 2 — NAT gateway creation settings (zonal, public subnet, Elastic IP). The screenshot does not show the later Available status.*
 
@@ -89,7 +89,7 @@ The public subnet was explicitly associated with the public route table, and the
 
 **Console:** EC2 → Instances → Launch instances → Network settings → choose **THREADX VPC and the correct subnet**. The private instance had an internal address but no public IPv4.
 
-![Private EC2 details with no public IPv4](screenshots/02-private-ec2-no-public-ip.png)
+![Private EC2 details with no public IPv4](screenshots/02-private-ec2-no-public-ip.webp)
 
 *Evidence 3 — Private IPv4 assigned, public IPv4 absent. Bastion SSH and private egress were not tested end-to-end.* For administration I set up a bastion path:
 

@@ -36,7 +36,7 @@ flowchart TB
 
 The diagram shows the **tested period**, before ALB deletion. A target group is not a service that launches servers; it registers them and checks health. The ASG launches/removes managed servers; the ALB forwards requests through its listener and target group.
 
-![ALB resource map with three healthy targets](screenshots/01-alb-three-healthy-targets.png)
+![ALB resource map with three healthy targets](screenshots/01-alb-three-healthy-targets.webp)
 
 *Evidence 1 — Three registered targets healthy at that time; this shows HTTP health-check success, not complete application functionality.*
 
@@ -89,7 +89,7 @@ sudo systemctl status nginx
 
 `systemctl enable` configures boot-time start; `--now` starts the service immediately. `status` is how I check the current service state. I also used target-group health status and browser/`curl` responses to verify the result outside the instance.
 
-![Linux terminal showing NGINX inactive and command to enable service](screenshots/02-nginx-unhealthy-service-recovery.png)
+![Linux terminal showing NGINX inactive and command to enable service](screenshots/02-nginx-unhealthy-service-recovery.webp)
 
 *Evidence 2 — The terminal showed nginx inactive/disabled. I ran `sudo systemctl enable --now nginx`; target health and responses were checked separately.*
 
@@ -134,7 +134,7 @@ After creating the Route 53 subdomain and validating the London ACM certificate,
 
 **Launch template versions:** Creating version 2 did not create a differently named template; `ThreadX-ASG-Template` kept the same identity and the ASG used its **Default** version, which was updated to version 2. “Default” means which version the ASG is configured to reference, not “version 1.”
 
-![Auto Scaling Group launch template version and capacity](screenshots/03-asg-template-version-2.png)
+![Auto Scaling Group launch template version and capacity](screenshots/03-asg-template-version-2.webp)
 
 *Evidence 3 — ASG settings after scale-down show the Default template version selection. The ASG name does not mean five instances were running.*
 

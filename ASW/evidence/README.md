@@ -1,8 +1,8 @@
 # Evidence map — THREADX AWS Assignments 1–3
 
-## What is actually published in Iteration 1?
+## Published evidence
 
-The **README files, diagrams, captured App 2 user-data and this evidence manifest** are committed. Nine cropped screenshots have been prepared in a separate, downloadable screenshot package, but the current GitHub connection could not directly upload their binary PNGs. **Do not claim images are published in GitHub until those PNGs are added.**
+The **README files, diagrams, captured App 2 user-data and this evidence manifest** are committed. Nine real screenshot images are published as WebP files. **Do not claim images are published in GitHub until those PNGs are added.**
 
 Use a few screenshots for defensible facts, not every AWS Console page visited. These are historical lab captures; some infrastructure no longer exists.
 
