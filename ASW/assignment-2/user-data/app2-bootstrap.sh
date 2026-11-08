@@ -1,6 +1,4 @@
 #!/bin/bash
-# THREADX App 2 — user data captured from the EC2 launch configuration.
-# Amazon Linux dnf installation. Intended for first boot via EC2 user data.
 set -e
 dnf install -y nginx
 systemctl enable --now nginx
