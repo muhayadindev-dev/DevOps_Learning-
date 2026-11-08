@@ -112,9 +112,21 @@ curl -I https://threadx.muhyadinelmi.com
 
 The output included **`HTTP/2 200`**, **`content-type: text/html`**, **`x-cache: Hit from cloudfront`**, a `via` header identifying CloudFront, and **`server: AmazonS3`**. The `age` header showed cached content was being reused. `curl -I` requests headers only, whereas `curl -i` includes headers and response body.
 
+![Terminal showing CloudFront cache hit with HTTP 200](screenshots/01-cloudfront-cache-hit.png)
+
+*Evidence 1 — `HTTP/2 200` and `x-cache: Hit from cloudfront` in the HTTPS response headers.*
+
 Next I replaced the **same** S3 `index.html` object with a visibly updated metallic-grey version. S3 already had the new object, but CloudFront could still serve an earlier cached copy. I went to **CloudFront → Distribution → Invalidations → Create invalidation** and used `/*` to invalidate cached paths, including `/` and `/index.html`.
 
-The console showed **Completed**. I then opened the updated storefront using **`threadx.muhyadinelmi.com`**, not just the direct S3 endpoint. That confirmed the changed content was reachable through the custom-domain CloudFront path.
+The console showed **Completed**.
+
+![CloudFront invalidation marked Completed for wildcard path](screenshots/02-invalidation-completed.png)
+
+*Evidence 2 — The `/*` invalidation reached Completed. That alone does not prove a visible page change.* I then opened the updated storefront using **`threadx.muhyadinelmi.com`**, not just the direct S3 endpoint. That confirmed the changed content was reachable through the custom-domain CloudFront path.
+
+![Revised THREADX storefront on custom domain](screenshots/03-updated-https-storefront.png)
+
+*Evidence 3 — The metallic-grey storefront displayed at `threadx.muhyadinelmi.com`, not just the direct S3 HTTP endpoint.*
 
 **Curated screenshot evidence (three images):** [evidence plan](screenshots/README.md).
 

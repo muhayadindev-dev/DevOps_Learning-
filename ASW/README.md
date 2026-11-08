@@ -1,4 +1,4 @@
-# THREADX — AWS Infrastructure Labs
+# AWS — THREADX | Three Infrastructure Assignments
 
 Three CoderCo AWS assignments built and troubleshot in the AWS Console, using the THREADX fictional clothing storefront as the project theme. The sequence moved from **VPC networking**, to **EC2 load balancing and Auto Scaling**, to **S3/CloudFront static delivery**. The aim was not just to create AWS resources; it was to understand how a request moves, what can block it, what health checks actually measure, and how to prove a change worked.
 
@@ -6,7 +6,10 @@ Three CoderCo AWS assignments built and troubleshot in the AWS Console, using th
 
 > **Historical lab evidence, not a permanent production environment.** The NAT gateway/EIP and Application Load Balancer were deleted after testing; the Auto Scaling Group was scaled to zero; several EC2 instances were stopped. The Assignment 3 distribution and website were verified on 8 November 2026. Live availability and bills can change after that date. This repository does not claim that all three architectures are running simultaneously.
 
-## 1. Projects and evidence
+
+> **Screenshot publication status:** All nine real screenshots have been cropped, named and positioned beside the matching explanations in the three independent READMEs. The binary files are supplied in a companion ZIP because the GitHub write connector cannot upload PNG bytes; until those files are added, their GitHub image references will be empty. No synthetic screenshots have been substituted.
+
+## 1. Project map and evidence
 
 | Assignment | What I built | What I verified | Detailed walkthrough |
 |---|---|---|---|

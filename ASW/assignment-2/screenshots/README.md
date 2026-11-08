@@ -1,6 +1,6 @@
 # Assignment 2 — Screenshot selection
 
-**Iteration 1 selects three actual historical captures.** Cropped PNGs are packaged separately and **not yet uploaded to this GitHub folder**.
+**Curated evidence selects three actual historical captures.** The genuine cropped PNGs are packaged separately and **not yet uploaded to this GitHub folder**.
 
 1. `01-alb-three-healthy-targets.png` — ALB resource map showing three HTTP targets marked healthy at that moment.
 2. `02-nginx-unhealthy-service-recovery.png` — EC2 terminal showing `nginx.service` **inactive (dead)** and **disabled**, followed by `sudo systemctl enable --now nginx`. Evidence of a real troubleshooting decision, not a generic screenshot.

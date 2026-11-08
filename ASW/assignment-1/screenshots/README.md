@@ -1,6 +1,6 @@
 # Assignment 1 — Screenshot selection
 
-**Iteration 1 selects three actual historical captures.** The binary PNGs have been cropped into the separate screenshot upload package and are **not yet in this GitHub folder**. Do not mistake the manifest for an uploaded image.
+**Curated evidence selects three actual historical captures.** The genuine screenshot PNGs are curated in the separate media upload package and are **not yet in this GitHub folder**. Do not mistake the manifest for an uploaded image.
 
 1. `01-vpc-route-tables.png` — private route-table view confirming local and NAT default route **configuration** at lab time, not a successful outbound connection.
 2. `02-private-ec2-no-public-ip.png` — private EC2 details showing no public IPv4.
