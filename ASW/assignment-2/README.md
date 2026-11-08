@@ -1,110 +1,75 @@
-# Assignment 2 — ALB, Auto Scaling and fixing unhealthy targets
+Assignment 2 — ALB, NGINX and Auto Scaling
+==========================================
 
-[← THREADX overview](../README.md) · [← Assignment 1](../assignment-1/README.md) · [Assignment 3 →](../assignment-3/README.md)
+[AWS overview](../README.md) · [Previous: VPC](../assignment-1/README.md) · [Next: S3 and CloudFront](../assignment-3/README.md)
 
-## 1. What I built
+Overview
+--------
 
-I wanted to take the VPC from Assignment 1 and see an actual web request distributed between **two EC2 applications in different Availability Zones**. I built an internet-facing Application Load Balancer (ALB), its target group, NGINX on two EC2 instances, the security groups, a launch template and an Auto Scaling Group (ASG). I later added HTTPS using ACM and Route 53.
+I extended the THREADX network with two NGINX applications in different Availability Zones, an internet-facing Application Load Balancer, a target group, a launch template and an Auto Scaling Group. I then connected the custom hostname and configured HTTPS.
 
-I got things working, but not in a straight line. One instance was **running**, yet the target group still said **unhealthy**. That forced me to separate “the VM exists” from “my web server is alive”.
+Repeated requests returned both application identifiers. The build also exposed a bootstrap problem and an NGINX service that was not enabled at boot. Those failures helped me distinguish an EC2 running state from a healthy application.
 
-## 2. Architecture and request path
+Architecture
+------------
 
 ```mermaid
 flowchart TB
-  Browser["Browser / curl"]
-  DNS["Route 53 Alias A\nthreadx.muhyadinelmi.com\n(historical ALB target)"]
-  ACM["ACM cert in eu-west-2\nfor HTTPS listener"]
-  subgraph VPC["THREADX VPC | 10.0.0.0/16"]
-    ALB["Internet-facing ALB\nlistener 80 / HTTPS 443"]
-    TG["ThreadX-TargetGroup\nHTTP :80 health checks"]
-    subgraph AZa["eu-west-2a | public 10.0.0.0/24"]
-      App1["EC2 App 1\nNGINX :80"]
-      ASGNode["ASG launched EC2\none extra healthy target"]
+    Client["Browser / curl"]
+    DNS["Route 53 Alias A<br/>threadx.muhyadinelmi.com<br/>Historical ALB target"]
+    Certificate["ACM | eu-west-2"]
+    subgraph VPC["threadX-vpc | 10.0.0.0/16 | eu-west-2"]
+        ALB["threadX-ALB<br/>Public-subnet mapping across two AZs<br/>HTTP :80 / HTTPS :443"]
+        TG["ThreadX-TargetGroup<br/>Instance targets | HTTP :80"]
+        subgraph ZoneA["eu-west-2a | public 10.0.0.0/24"]
+            App1["EC2 App 1 | 10.0.0.186<br/>NGINX :80"]
+        end
+        subgraph ZoneB["eu-west-2b | public 10.0.2.0/24"]
+            App2["EC2 App 2 | 10.0.2.36<br/>NGINX :80"]
+        end
+        ASG["Grow-to-5-ThreadX<br/>ThreadX-ASG-Template | Default"]
+        Managed["Additional registered EC2 target<br/>Final AZ not retained in the capture"]
     end
-    subgraph AZb["eu-west-2b | public 10.0.2.0/24"]
-      App2["EC2 App 2\nNGINX :80"]
-    end
-    ASG["Grow-to-5-ThreadX ASG\nlaunch template v2"]
-  end
-  Browser --> DNS --> ALB
-  ACM -. "TLS cert attached" .-> ALB
-  ALB --> TG
-  TG --> App1
-  TG --> App2
-  TG --> ASGNode
-  ASG -. "creates managed instances" .-> ASGNode
+    Client -. "DNS lookup" .-> DNS
+    DNS -. "Alias target" .-> ALB
+    Client -->|"HTTP :80 or HTTPS :443"| ALB
+    Certificate -. "Certificate on HTTPS listener" .-> ALB
+    ALB --> TG
+    TG --> App1
+    TG --> App2
+    TG --> Managed
+    ASG -. "Launches managed capacity" .-> Managed
 ```
 
-The actual HTTP request path was:
+The solid arrows describe web requests. DNS and certificate attachment are separate relationships. The target group represents registered backends and health-check settings, not another server. The two named application instances were in public subnets; this is not a claim that I built the private-backend design used in some reference projects.
 
-```text
-Browser or curl
-    -> ALB security group + listener (HTTP 80 / HTTPS 443)
-    -> ThreadX-TargetGroup (HTTP 80)
-    -> healthy EC2 target
-    -> NGINX response
-```
+Configuration and decisions
+---------------------------
 
-The target group is not another server and doesn't create EC2 instances. It contains the registered targets and the ALB's health-check configuration. The ASG is a separate resource responsible for launching or replacing instances according to capacity settings.
-
-## 3. What I configured
-
-| Resource | Recorded setup |
+| Component | Recorded setup |
 |---|---|
-| Region/VPC | London `eu-west-2`; THREADX `10.0.0.0/16` |
-| Public subnet A | `10.0.0.0/24` in `eu-west-2a` |
-| Public subnet B | `10.0.2.0/24` in `eu-west-2b` |
-| ALB | `threadX-ALB`, internet-facing |
-| Target group | `ThreadX-TargetGroup`, instance targets, HTTP port 80 |
-| App 1 | EC2 with NGINX; private IPv4 `10.0.0.186` |
-| App 2 | EC2 with NGINX; private IPv4 `10.0.2.36` |
-| ASG | `Grow-to-5-ThreadX` using `ThreadX-ASG-Template`, default version 2 |
-| HTTPS | ALB listener 443 using ACM certificate in London; forwards to HTTP targets |
+| VPC | `threadX-vpc`, `10.0.0.0/16`, London `eu-west-2` |
+| Public subnet A | `10.0.0.0/24`, `eu-west-2a`; App 1 at `10.0.0.186` |
+| Public subnet B | `10.0.2.0/24`, `eu-west-2b`; App 2 at `10.0.2.36` |
+| ALB | `threadX-ALB`, internet-facing; HTTP `80`, later HTTPS `443` |
+| Target group | `ThreadX-TargetGroup`, instance targets, HTTP `80` |
+| Launch template | `ThreadX-ASG-Template`; Amazon Linux 2023, `t3.micro`, 8 GiB gp3 in the captured creation view |
+| ASG | `Grow-to-5-ThreadX`; template selector `Default`; cleanup capture shows desired `0`, limits `0–2` |
+| TLS and DNS | ACM certificate in `eu-west-2`; Route 53 Alias A for `threadx.muhyadinelmi.com` |
 
-### Why two public subnets?
+I added pub2-threadX (`10.0.2.0/24`) in eu-west-2b and explicitly associated it with the existing public route table; both public subnets used the same IGW default route. The ALB needed mapping across two AZs. Its HTTPS listener terminated viewer TLS and forwarded HTTP to NGINX on port `80`.
 
-An internet-facing ALB needs subnet placement in at least two Availability Zones. The two public subnets could share one public route table because they used the same next hop, but the EC2s themselves lived in different subnet/AZ combinations.
+The App 2 security view shows HTTP `80` sourced from `ALB-threadX-sg` (`sg-0e695b28211321595`) and outbound traffic to `0.0.0.0/0`. I added separate administrative SSH access during troubleshooting. This is captured configuration, not a direct-access rejection test.
 
-### Why these security group rules?
+<p>
+<a href="screenshots/04-backend-security-rules.jpg"><img src="screenshots/04-backend-security-rules.jpg" width="580" alt="App 2 HTTP ingress restricted to the ALB security group"></a><br>
+<sub>App 2: HTTP 80 from the ALB group; outbound all traffic.</sub>
+</p>
 
-The ALB security group allowed inbound web traffic on its listeners. The application security group allowed **HTTP 80 from the ALB security group**, rather than from arbitrary clients. I also used a separate, restricted SSH route for troubleshooting App 1.
+Implementation walkthrough
+--------------------------
 
-I had to stop using “security group”, “target group” and “Auto Scaling Group” as if they all did some kind of routing:
-
-- **Security Group:** permits or denies supported traffic on the associated AWS resource.
-- **Target Group:** identifies ALB backends and tests their health.
-- **Auto Scaling Group:** maintains a chosen number of EC2 instances from a launch template.
-
-## 4. Healthy versus unhealthy — where the real troubleshooting happened
-
-**Console:** EC2 → Target Groups → `ThreadX-TargetGroup` → **Targets**.
-
-**Healthy** means the target passed enough checks against the configured health-check endpoint/port. **Unhealthy** means the checks failed. Neither state is a claim that every part of an application works. Equally, EC2 **Running** only means the VM is powered on, not that NGINX is serving port 80.
-
-**Evidence — [open the ALB target-health screenshot](screenshots/01-alb-three-healthy-targets.webp).** It shows **three healthy registered targets** at one stage of the lab. The ASG name contains “5”, but I am not claiming five EC2s were running.
-
-### Problem 1 — my first bootstrap did not run correctly
-
-My initial App 1 user data was missing `#!/bin/bash`. NGINX did not get installed as expected during launch. I had to connect to the EC2 and investigate rather than keep changing the load balancer.
-
-### Problem 2 — NGINX was not enabled at startup
-
-I manually started NGINX, but after an EC2 stop/start it was no longer running. That explained why a previously healthy target became unhealthy again. The useful commands were:
-
-```bash
-sudo systemctl status nginx
-sudo systemctl enable --now nginx
-sudo systemctl status nginx
-```
-
-`status` checks the systemd service. `enable` configures it to start at boot, and `--now` starts it in the same command. I then checked the target group and re-ran the browser/`curl` test.
-
-**Evidence — [open the NGINX service-recovery screenshot](screenshots/02-nginx-unhealthy-service-recovery.webp).** This is the actual `inactive (dead)` / disabled finding and the `enable --now` action. It's more valuable to me than an extra screenshot of a green resource-creation banner.
-
-### The corrected App 2 user-data script
-
-When launching the replacement App 2 instance, I used the following complete user data. I kept it in [`user-data/app2-bootstrap.sh`](user-data/app2-bootstrap.sh) as well:
+**1. Prepare the EC2 applications.** I used different page identifiers so that a response would show which instance handled it. The recorded [App 2 bootstrap script](user-data/app2-bootstrap.sh) was:
 
 ```bash
 #!/bin/bash
@@ -114,45 +79,140 @@ systemctl enable --now nginx
 echo "<h1>Welcome to THREADX Online Clothing Store - EC2 Application 2</h1>" > /usr/share/nginx/html/index.html
 ```
 
-This is the **actual App 2 user data** from the lab, on a `dnf`-based image. I am not presenting it as the exact script for App 1: that first launch had the missing-shebang mistake.
+This is an Amazon Linux script using `dnf`. It is not the original App 1 script, which my notes identify as missing its shell shebang.
 
-## 5. Proving the load balancer worked
+**2. Configure the ALB and target group.** I registered the application instances as HTTP targets on port `80` and used the ALB listener to forward requests to the group. The final resource map showed three healthy registered targets on port `80`. Earlier unhealthy states are retained below only where they explain the NGINX recovery.
 
-I repeatedly queried the ALB DNS name from my Mac:
+<p>
+<a href="screenshots/01-alb-three-healthy-targets.jpg"><img src="screenshots/01-alb-three-healthy-targets.jpg" width="580" alt="ALB resource map with three healthy HTTP port 80 targets"></a><br>
+<sub>Three healthy registered targets behind the HTTP listener.</sub>
+</p>
+
+Registration, health-check success and a completed HTTP request are different stages. That view does not prove an AZ failure test or an equal split of requests.
+
+**3. Add a launch template and ASG.** I selected the Amazon Linux image, instance type, security group and storage in the template, then used it for managed capacity. The saved template view confirms version `2` became the default. The ASG selected `Default`, so its launches followed that pointer. Its capacity view records desired `0` and limits `0–2`; that is a point-in-time configuration, not proof that no managed instances ever ran.
+
+<p>
+<a href="screenshots/11-template-nginx-bootstrap.jpg"><img src="screenshots/11-template-nginx-bootstrap.jpg" width="580" alt="Launch template user data installs NGINX and enables it immediately"></a><br>
+<sub>Template user data: correct nginx package, shell shebang and enable --now.</sub>
+</p>
+
+<table>
+<tr>
+<td width="50%">
+<a href="screenshots/06-launch-template-default-v2.jpg"><img src="screenshots/06-launch-template-default-v2.jpg" width="360" alt="Launch template version 2 marked as default with saved success banner"></a><br>
+<sub>Saved template version 2 is the default; owner fields redacted.</sub>
+</td>
+<td width="50%">
+<a href="screenshots/03-asg-capacity-and-template.jpg"><img src="screenshots/03-asg-capacity-and-template.jpg" width="360" alt="ASG capacity overview showing desired zero and scaling limits zero to two"></a><br>
+<sub>ASG uses Default; captured desired capacity 0, limits 0–2.</sub>
+</td>
+</tr>
+</table>
+
+An early form had optional ELB checks unselected. The later creation review explicitly shows `EC2, ELB` and a `300`-second grace period, with the target group attached. I use that later review to document the intended health configuration; it does not prove replacement behaviour. I did not capture a load-driven scaling test or an application-failure replacement test.
+
+<p>
+<a href="screenshots/07-asg-health-check-review.jpg"><img src="screenshots/07-asg-health-check-review.jpg" width="580" alt="ASG creation review attaches target group and selects EC2 and ELB health checks"></a><br>
+<sub>Later review: target group attached; EC2 and ELB checks; 300-second grace period.</sub>
+</p>
+
+The ASG name contained “5”, but the saved cleanup capacity was desired `0`, minimum `0`, maximum `2`. I observed additional registered capacity during the lab; I did not demonstrate five running instances or CPU-triggered scale-out.
+
+**4. Configure the custom domain and HTTPS.** I requested a DNS-validated ACM certificate in London, validated the hostname and attached a certificate to the ALB's HTTPS listener. The original certificate captures show Pending validation followed by Issued. The saved listener view below is stronger evidence of the resulting setup: HTTP `80` and HTTPS `443` both forward to `ThreadX-TargetGroup`, with the custom-domain certificate on the HTTPS listener. HTTP was still forwarded, not redirected to HTTPS in this ALB stage.
+
+<p>
+<a href="screenshots/08-http-https-listeners.jpg"><img src="screenshots/08-http-https-listeners.jpg" width="580" alt="Active ALB with HTTP and HTTPS listeners forwarding to target group"></a><br>
+<sub>Saved listeners: HTTP 80 and HTTPS 443 forward to the target group; HTTPS has a certificate.</sub>
+</p>
+
+The later browser capture below is the end-to-end check of the custom HTTPS address. This hostname was subsequently repointed to CloudFront for Assignment 3.
+
+Verification
+------------
+
+I repeatedly ran the following request from my Mac:
 
 ```bash
 curl http://threadX-ALB-1786616983.eu-west-2.elb.amazonaws.com
 ```
 
-The responses included:
+The captured responses included:
 
-```text
-Welcome to THREADX Online Clothing Store - EC2 Application 1
-Welcome to THREADX Online Clothing Store - EC2 Application 2
+```html
+<h1>Welcome to THREADX Online Clothing Store - EC2 Application 2</h1>
+<h1>Welcome to THREADX Online Clothing Store - EC2 Application 1</h1>
 ```
 
-That is stronger evidence of forwarding to both instances than seeing “2/2 healthy” alone. It shows actual HTTP responses with different app identifiers. It doesn't prove perfectly equal distribution; just that both backends served requests.
+The same terminal capture includes the historical DNS check:
 
-When I added HTTPS, I configured an ACM certificate in **`eu-west-2`** and the ALB's 443 listener, with TLS terminating at the ALB and HTTP continuing to NGINX internally. That ALB was deleted after testing, and its former custom DNS name was repointed to CloudFront for Assignment 3.
+```bash
+dig +short threadx.muhyadinelmi.com
+```
 
-## 6. Auto Scaling Group and launch template
+It returned `18.169.198.150` and `18.169.245.242` during the ALB stage. These are recorded answers, not addresses to hard-code or assume remain assigned to this project.
 
-The launch template was named `ThreadX-ASG-Template`. I made a **version 2** and configured the ASG to use its **Default** template version. The default pointer can change; it doesn't always mean version 1.
+<table>
+<tr>
+<td width="50%">
+<a href="screenshots/09-curl-backend-responses.jpg"><img src="screenshots/09-curl-backend-responses.jpg" width="360" alt="Repeated curl responses return App 1 and App 2 and dig shows ALB-stage DNS answers"></a><br>
+<sub>Actual backend responses and historical DNS answers; cropped to the ALB test output.</sub>
+</td>
+<td width="50%">
+<a href="screenshots/10-custom-domain-https.jpg"><img src="screenshots/10-custom-domain-https.jpg" width="360" alt="App 1 served through the custom HTTPS hostname"></a><br>
+<sub>HTTPS custom-domain request returns App 1, before the hostname moves to CloudFront.</sub>
+</td>
+</tr>
+</table>
 
-I observed a third target become healthy, alongside my two original app instances. Afterwards I scaled the ASG down to zero rather than leave it creating replacement instances and running up charges.
+| Check | Evidence | Conclusion |
+|---|---|---|
+| Requests reach both applications | Repeated ALB `curl` responses with App 1 and App 2 identifiers | Captured end-to-end HTTP test |
+| Target health | Resource map with three healthy HTTP targets | Captured health-check result at that point |
+| Custom-domain HTTPS | Browser page at `https://threadx.muhyadinelmi.com`, displaying App 1 | Captured browser test; no separate TLS-cipher audit |
+| ASG configuration and cleanup | Template selector and desired `0`, limits `0–2` | Captured configuration, not a scaling-under-load test |
+| Extra capacity | Third healthy target; an earlier managed instance is associated with Grow-to-5-ThreadX in the archive | Registration captured; earlier instance details show ASG ownership, but the final target is not traced to a specific launch event |
+| AZ outage, load-triggered scale-out and NGINX-driven instance replacement | No test evidence retained | Not verified |
 
-**Evidence — [open the ASG settings screenshot](screenshots/03-asg-template-version-2.webp).** It shows template version/capacity configuration. It is not proof that five instances ran or that I tested CPU-triggered scaling under load.
+Troubleshooting
+---------------
 
-## 7. Where I struggled and what I learnt
+<p>
+<a href="screenshots/05-unhealthy-app1.jpg"><img src="screenshots/05-unhealthy-app1.jpg" width="580" alt="Target group shows App 1 unhealthy and App 2 healthy before service recovery"></a><br>
+<sub>Before recovery: App 1 health checks fail while App 2 is healthy.</sub>
+</p>
 
-**My initial instinct was to look at the load balancer whenever a target was unhealthy.** But the fault was on the instance: the script hadn't bootstrapped NGINX correctly, then the service wasn't enabled across restarts. This taught me to check from the bottom up: instance state → NGINX service → port/security rules → target health → real HTTP response.
+**Bootstrap and service startup.** My notes record a missing `#!/bin/bash` in the initial App 1 user data. The retained terminal capture establishes a second, specific problem: NGINX was installed but `disabled` and `inactive (dead)` on App 1. I ran:
 
-**I mixed up the groups.** I now have a practical anchor: SG = permissions, TG = registered destinations and health checks, ASG = EC2 capacity.
+```bash
+sudo systemctl status nginx
+sudo systemctl enable --now nginx
+sudo systemctl status nginx
+```
 
-**I was tempted to call the job finished when the Console turned green.** Running `curl` multiple times gave me much better evidence. There is still a difference between passing a health check and demonstrating how the application behaves.
+The capture shows the first status and the `enable --now` command creating the systemd link; it does not show the final status command. The healthy-target view and actual responses provide separate evidence that the application subsequently served requests.
 
-For a future independent replay, I want to build the ALB/ASG from a blank VPC, choose health-check settings without guidance, then verify scaling with deliberate load rather than assume its name or desired capacity proves scaling worked.
+<p>
+<a href="screenshots/02-nginx-service-recovery.jpg"><img src="screenshots/02-nginx-service-recovery.jpg" width="580" alt="NGINX inactive and disabled followed by systemctl enable now command"></a><br>
+<sub>App 1 service diagnosis and enable --now command; later healthy targets and responses verify service recovery.</sub>
+</p>
 
-**Cleanup:** ALB deleted; ASG scaled to zero; the ASG-managed instance terminated. Some stopped lab EC2s and EBS volumes remained.
+I had initially treated an unhealthy target as a load-balancer problem. The useful order was to inspect the instance, the NGINX service, network permissions, target health and then the real response. Changing the ALB would not have started a stopped service.
 
-[← THREADX overview](../README.md)
+**Certificate validation.** Pending validation was an intermediate certificate state, not evidence of a broken web server. I needed DNS validation to complete before using the certificate on the listener; the issued certificate and successful HTTPS browser request are different checks.
+
+Lessons learned
+---------------
+
+Security groups control permitted traffic, target groups identify backends and test their health, and an ASG manages EC2 capacity. I needed to stop using those names as if they described the same responsibility.
+
+The strongest result was the pair of backend identifiers in real HTTP responses. The next exercise should deliberately stop an application, observe ALB routing, inspect which health checks the ASG actually uses and then test replacement and scaling. That would establish behaviour this lab did not prove.
+
+Cleanup and references
+----------------------
+
+My notes record deleting the ALB, setting the ASG to zero and terminating its managed instance. The saved ASG view confirms zero desired capacity. Some practice instances were stopped rather than terminated, so storage needed checking separately. The old ALB hostname is historical.
+
+[AWS ALB target health](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/target-group-health-checks.html) · [AWS Auto Scaling health checks](https://docs.aws.amazon.com/autoscaling/ec2/userguide/ec2-auto-scaling-health-checks.html)
+
+[AWS overview](../README.md)

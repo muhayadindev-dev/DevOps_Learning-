@@ -1,44 +1,67 @@
-# THREADX — Three AWS Infrastructure Assignments
+THREADX — AWS Infrastructure Labs
+=================================
 
-I built three AWS labs as part of the CoderCo DevOps course. I wanted to understand **why** I was creating each resource, rather than just following the Console until everything turned green. I spent much longer on the networking and DNS parts than I expected. Some things clicked quickly; others took screenshots, failed checks and going back over the same idea before it made sense.
+Three CoderCo assignments tracing a web application from VPC networking to load-balanced EC2 and then static delivery through CloudFront. I built the resources in the AWS Console and used terminal requests, service status and browser checks to understand what each layer was doing.
 
-The labs follow one THREADX clothing-store theme, but **they are three separate exercises**, not one always-running production system.
+The work took place on 6–8 November 2026. These are separate lab stages with shared THREADX naming, not one continuously running production environment. The custom hostname moved from the Assignment 2 ALB to the Assignment 3 CloudFront distribution.
 
-## Start here — the three assignments
+Assignments
+-----------
 
-| Assignment | What I built | What I actually tested |
+| Project | Implementation | Evidence and limits |
 |---|---|---|
-| **[01 — VPC & Networking](assignment-1/README.md)** | A custom VPC, public/private subnet routing, IGW, NAT Gateway, EC2 and a bastion design | AWS network configuration, private EC2 address placement and NAT availability; full private SSH/egress still need a retest |
-| **[02 — ALB & Auto Scaling](assignment-2/README.md)** | Two-zone NGINX EC2 application, ALB, target group, security groups, launch template, ASG and HTTPS | Healthy targets, alternating EC2 responses using `curl`, the NGINX failure/recovery sequence |
-| **[03 — S3, CloudFront & Route 53](assignment-3/README.md)** | Static HTML website in S3, CloudFront CDN, ACM certificate, custom DNS and cache invalidation | HTTPS site, CloudFront cache hit and the updated site after a completed invalidation |
+| [1. VPC and networking](assignment-1/README.md) | Custom VPC, public/private subnets, IGW, NAT, EC2 and intended bastion access | Captured routes, subnet associations, addressing and NAT metrics. Later captures show corrected bastion permissions; private SSH and egress were not verified end to end. |
+| [2. ALB and Auto Scaling](assignment-2/README.md) | NGINX applications across two AZs, ALB, target group, launch template, ASG and HTTPS | Captured responses from both applications, service recovery, target health and the HTTPS page. No load-triggered scaling or AZ-outage test is claimed. |
+| [3. S3 and CloudFront](assignment-3/README.md) | Public S3 website origin, CloudFront, ACM, Route 53 and Cloudflare delegation | Captured cache-hit headers, completed invalidation and the updated custom-domain page. The origin remained public and HTTP-only. |
 
-Every assignment folder contains **one README**, its own `screenshots/` folder and, where relevant, the user-data script. I put screenshot links immediately beside the part of the walkthrough they prove. I have kept the diagrams in GitHub Mermaid so they are readable without another image.
+Each assignment has its own architecture, configuration decisions, walkthrough, verification and troubleshooting. I reviewed all 257 supplied screenshots and selected 30 evidence views across the three assignments. Each sits beside the step it supports, at a restrained width with a link to the full image. Browser distractions, AWS account identifiers, IAM owner fields and personal client addresses are cropped or visibly redacted; configuration values and test output are preserved.
 
-## Project approach
+Working context
+---------------
 
-- **Region:** London (`eu-west-2`) for the VPC/EC2/S3 components. The CloudFront viewer certificate was issued in `us-east-1`, as CloudFront requires.
-- **Provisioning:** AWS Management Console. There is no Terraform or CI/CD deployment in these three exercises.
-- **Domain:** `threadx.muhyadinelmi.com`. I own the parent domain through Cloudflare; the THREADX subdomain was delegated to Route 53.
-- **Application:** A small NGINX test page for the ALB assignment and a separate static THREADX storefront in S3 for the CDN assignment.
+| Area | Lab choice |
+|---|---|
+| Main AWS Region | London, `eu-west-2` |
+| VPC | `threadX-vpc`, `10.0.0.0/16` |
+| Compute | Amazon Linux EC2 instances running NGINX |
+| Domain | `threadx.muhyadinelmi.com`; parent DNS at Cloudflare, subdomain delegated to Route 53 |
+| TLS certificates | `eu-west-2` for the ALB; `us-east-1` for the CloudFront viewer certificate |
+| Provisioning | AWS Console; no Terraform deployment or CI/CD pipeline in these labs |
+| Application | EC2 identification pages for Assignment 2; a separate fictional static storefront for Assignment 3 |
 
-## The biggest lessons
+The storefront HTML and product imagery were generated with Codex. My work documented here is the AWS hosting, networking, configuration, verification and troubleshooting.
 
-**Networking:** The VPC, subnet, route table and security group have different responsibilities. A subnet does not become public because I called it “public”, and having an IGW doesn't automatically give an instance a public IP. I needed to separate routing from permissions and from the application that listens on a port.
+How I treat the evidence
+-----------------------
 
-**Load balancing:** I originally treated an EC2 **running** state as if it should mean the website worked. It doesn't. The instance can be running while NGINX is stopped. The ALB target health check and an actual HTTP response are separate pieces of evidence.
+I separate a selected setting, a saved configuration and a working request. A creation-form screenshot records a choice; it does not establish that the resource was deployed. A healthy target proves a health check passed; a response containing an application identifier demonstrates that the backend served a request.
 
-**DNS and CloudFront:** I got tangled up in S3 website endpoints, Alias A records and CloudFront domain names. The part that eventually clicked was that DNS locates CloudFront, while CloudFront retrieves or caches content from S3. I also learned not to rebuild a working service because one recursive DNS lookup returns nothing.
+The verification tables distinguish captured results from observations retained only in my lab notes and tests I still need to repeat. Tests that remain unfinished are identified in each assignment.
 
-## Where the evidence lives
+What connected the three assignments
+-----------------------------------
 
-I kept it intentionally light: **three screenshots per assignment**, stored in the assignment's `screenshots/` folder. The README links open the originals when you want to zoom in. This is easier to read on GitHub than nine enormous full-width console images.
+Networking made me separate address ranges, routing and permissions. Reviewing the bastion rules exposed an SSH source mismatch; later captures show the rule corrections.
 
-My terminal commands and results are written next to the explanation, especially where a screenshot would only repeat the same information. **Configured**, **observed** and **end-to-end tested** are not interchangeable.
+The ALB exercise made service state concrete: an EC2 instance can be running while NGINX is inactive. Checking systemd and then issuing HTTP requests was more useful than repeatedly changing the load balancer.
 
-## Lab lifecycle and costs
+The CDN exercise made me distinguish the stored object, the cached response and the DNS answer. An updated S3 object, a completed invalidation and the new page at the custom domain are different checks.
 
-These are snapshots from **6–8 November 2026**. After the tests, I removed the NAT Gateway/EIP and the ALB, brought the ASG down to zero and stopped practice EC2 instances to control spending. The custom DNS name was changed from the historical ALB target to CloudFront during Assignment 3. I am not claiming all three stages remain live today. Stopped instances can still leave chargeable EBS storage.
+Lifecycle and costs
+-------------------
 
-## Architecture reference (optional)
+My lab notes record deleting the NAT Gateway and releasing its Elastic IP, deleting the ALB, reducing the ASG to zero and stopping practice EC2 instances. The ASG screenshot confirms desired capacity `0` and limits `0–2`. These are historical cleanup records, not a current audit of the AWS account.
 
-The three READMEs already contain their own diagrams. For a side-by-side architecture-only view, see **[the Mermaid architecture reference](zz-architecture.md)**.
+Stopped instances can retain billable EBS volumes. S3, CloudFront and Route 53 also need reviewing separately; deleting the old ALB did not remove the later static website or DNS resources.
+
+Related work and references
+---------------------------
+
+These labs build on my [Linux/Bandit work](../linux/bandit/README.md), [EC2 and DNS networking project](../networking/README.md) and [Docker application](../docker/README.md).
+
+For documentation structure I studied [mazin1hn/aws](https://github.com/mazin1hn/aws), [mohamed67471/aws](https://github.com/mohamed67471/aws) and [hasanenv/aws-alb-nginx-architecture](https://github.com/hasanenv/aws-alb-nginx-architecture). The resource settings, commands, screenshots and test boundaries in this directory describe my own labs.
+
+Architecture reference (optional)
+---------------------------------
+
+[Compare the three architectures without the walkthroughs](zz-architecture.md). Start with the assignment READMEs for the evidence and limitations.

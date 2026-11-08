@@ -1,91 +1,96 @@
-# THREADX — Architecture reference
+THREADX — Architecture Reference
+=================================
 
-**Read the [Assignment 1](assignment-1/README.md), [Assignment 2](assignment-2/README.md) and [Assignment 3](assignment-3/README.md) READMEs first.** They contain the build decisions, troubleshooting and screenshots. This file is just a convenient way to compare the three Mermaid diagrams.
+Read the [VPC](assignment-1/README.md), [ALB](assignment-2/README.md) and [S3/CloudFront](assignment-3/README.md) walkthroughs for the implementation evidence. This optional reference compares their diagrams without repeating the screenshots.
 
-These are **three successive historical labs**, not one permanently running architecture. The ALB was deleted before the custom DNS name was repointed to CloudFront.
+These are historical lab stages. The ALB was deleted and the custom hostname was later repointed to CloudFront. The diagrams do not claim that all resources remain deployed.
 
-## 1. Public/private VPC routing
-
-```mermaid
-flowchart TB
-  Internet["Internet"]
-  subgraph VPC["THREADX VPC | 10.0.0.0/16 | eu-west-2"]
-    IGW["Internet gateway"]
-    subgraph PUB["Public subnet | 10.0.0.0/24 | 2a"]
-      PublicEC2["Public EC2 + bastion"]
-      NAT["Zonal NAT gateway\npublic EIP (later deleted)"]
-      PUBRT["Public RT\n10.0.0.0/16 -> local\n0.0.0.0/0 -> IGW"]
-    end
-    subgraph PRIV["Private subnet | 10.0.1.0/24 | 2a"]
-      PrivateEC2["Private EC2\nno public IPv4"]
-      PRIVRT["Private RT\n10.0.0.0/16 -> local\n0.0.0.0/0 -> NAT\n(while NAT existed)"]
-    end
-  end
-  Internet <--> IGW
-  IGW --- PUBRT
-  PublicEC2 --- PUBRT
-  NAT --- PUBRT
-  PrivateEC2 --- PRIVRT
-  PRIVRT -. "outbound default route while NAT existed" .-> NAT
-  PublicEC2 -. "planned SSH hop\nnot proven end to end" .-> PrivateEC2
-```
-
-The NAT was later removed. A configured private route or bastion security rule is not proof of a successful SSH or outbound connection.
-
-## 2. ALB, EC2 targets and Auto Scaling
+VPC routing and corrected bastion rules
+---------------------------------------
 
 ```mermaid
 flowchart TB
-  Browser["Browser / curl"]
-  DNS["Route 53 Alias A\nthreadx.muhyadinelmi.com\n(historical ALB target)"]
-  ACM["ACM cert in eu-west-2\nfor HTTPS listener"]
-  subgraph VPC["THREADX VPC | 10.0.0.0/16"]
-    ALB["Internet-facing ALB\nlistener 80 / HTTPS 443"]
-    TG["ThreadX-TargetGroup\nHTTP :80 health checks"]
-    subgraph AZa["eu-west-2a | public 10.0.0.0/24"]
-      App1["EC2 App 1\nNGINX :80"]
-      ASGNode["ASG launched EC2\none extra healthy target"]
+    Internet["Internet"]
+    Laptop["My laptop"]
+    subgraph VPC["threadX-vpc | 10.0.0.0/16 | eu-west-2"]
+        IGW["ig-threadX<br/>Internet Gateway"]
+        subgraph Public["pub-threadx | 10.0.0.0/24 | eu-west-2a"]
+            PublicEC2["EC2Pub-threadX<br/>10.0.0.243"]
+            Bastion["Bastion-1<br/>10.0.0.234"]
+            NAT["ng-threadX<br/>Public NAT + Elastic IP"]
+        end
+        subgraph Private["piv-threadX | 10.0.1.0/24 | eu-west-2a"]
+            PrivateEC2["EC2PRIV-threadX<br/>10.0.1.16 | no public IPv4"]
+        end
     end
-    subgraph AZb["eu-west-2b | public 10.0.2.0/24"]
-      App2["EC2 App 2\nNGINX :80"]
-    end
-    ASG["Grow-to-5-ThreadX ASG\nlaunch template v2"]
-  end
-  Browser --> DNS --> ALB
-  ACM -. "TLS cert attached" .-> ALB
-  ALB --> TG
-  TG --> App1
-  TG --> App2
-  TG --> ASGNode
-  ASG -. "creates managed instances" .-> ASGNode
+    PublicEC2 -->|"Public default route"| IGW
+    PrivateEC2 -->|"Private default route: configured"| NAT
+    NAT -->|"Public default route"| IGW
+    IGW --> Internet
+    Laptop -. "SSH :22; rule corrected, session unverified" .-> Bastion
+    Bastion -. "SSH :22; source group corrected, session unverified" .-> PrivateEC2
 ```
 
-Healthy describes the ALB health-check status. It does not replace an actual application response test.
+Solid paths record configured routing while NAT existed; dashed SSH paths show corrected permissions, without a captured session. NAT metrics did not establish the source instance.
 
-## 3. S3, CloudFront and DNS
+ALB, EC2 and managed capacity
+-----------------------------
 
 ```mermaid
 flowchart TB
-  Visitor["Browser\nhttps://threadx.muhyadinelmi.com"]
-  CFProvider["Cloudflare parent DNS\nNS delegation for threadx"]
-  R53["Route 53 public hosted zone\nAlias A -> CloudFront"]
-  ACM["ACM in us-east-1\nDNS-validated TLS certificate"]
-  subgraph CDN["CloudFront | GLOBAL"]
-    Edge["Edge location\nGET / HEAD\nCachingOptimized"]
-  end
-  subgraph AWSLondon["S3 | eu-west-2 | outside VPC"]
-    Origin["S3 static website endpoint\nHTTP only | public read"]
-    Files["threadx-bucket-web\nindex.html / error.html"]
-  end
-  Visitor -. "DNS lookup" .-> CFProvider
-  CFProvider --> R53
-  R53 -. "CloudFront IPv4 addresses" .-> Visitor
-  Visitor -->|"HTTPS :443"| Edge
-  ACM -. "certificate" .-> Edge
-  Edge -->|"HTTP :80 on cache miss"| Origin
-  Origin --> Files
+    Client["Browser / curl"]
+    DNS["Route 53 Alias A<br/>threadx.muhyadinelmi.com<br/>Historical ALB target"]
+    Certificate["ACM | eu-west-2"]
+    subgraph VPC["threadX-vpc | 10.0.0.0/16 | eu-west-2"]
+        ALB["threadX-ALB<br/>Public-subnet mapping across two AZs<br/>HTTP :80 / HTTPS :443"]
+        TG["ThreadX-TargetGroup<br/>Instance targets | HTTP :80"]
+        subgraph ZoneA["eu-west-2a | public 10.0.0.0/24"]
+            App1["EC2 App 1 | 10.0.0.186<br/>NGINX :80"]
+        end
+        subgraph ZoneB["eu-west-2b | public 10.0.2.0/24"]
+            App2["EC2 App 2 | 10.0.2.36<br/>NGINX :80"]
+        end
+        ASG["Grow-to-5-ThreadX<br/>ThreadX-ASG-Template | Default"]
+        Managed["Additional registered EC2 target<br/>Final AZ not retained in the capture"]
+    end
+    Client -. "DNS lookup" .-> DNS
+    DNS -. "Alias target" .-> ALB
+    Client -->|"HTTP :80 or HTTPS :443"| ALB
+    Certificate -. "Certificate on HTTPS listener" .-> ALB
+    ALB --> TG
+    TG --> App1
+    TG --> App2
+    TG --> Managed
+    ASG -. "Launches managed capacity" .-> Managed
 ```
 
-DNS provides the address to connect to; CloudFront receives the HTTPS web request, uses its cache and can fetch public S3 website content over HTTP.
+The named app instances were in public subnets. Three healthy targets were captured, but the additional target's final AZ was not retained. DNS and certificate relationships are separate from web traffic.
 
-[← THREADX overview](README.md)
+S3 website delivery through CloudFront
+--------------------------------------
+
+```mermaid
+flowchart TB
+    Browser["Browser<br/>threadx.muhyadinelmi.com"]
+    Resolver["Recursive DNS resolver"]
+    Parent["Cloudflare authoritative DNS<br/>muhyadinelmi.com"]
+    Zone["Route 53 public hosted zone<br/>threadx.muhyadinelmi.com"]
+    Certificate["ACM viewer certificate<br/>us-east-1"]
+    Edge["CloudFront | GLOBAL<br/>HTTPS, cache, GET / HEAD"]
+    subgraph London["Amazon S3 | eu-west-2 | outside the VPC"]
+        Origin["Public S3 website endpoint<br/>threadx-bucket-web"]
+        Objects["index.html<br/>error.html"]
+    end
+    Browser -. "DNS lookup" .-> Resolver
+    Resolver -. "Parent delegation lookup" .-> Parent
+    Parent -. "NS delegation for THREADX subdomain" .-> Zone
+    Zone -. "Alias A targets distribution" .-> Edge
+    Browser -->|"HTTPS :443"| Edge
+    Certificate -. "Viewer TLS" .-> Edge
+    Edge -->|"HTTP :80 on cache miss"| Origin
+    Origin --> Objects
+```
+
+The browser uses HTTPS to CloudFront; the public website origin uses HTTP. DNS delegation and the Alias are lookup/configuration relationships, not content proxies.
+
+[AWS overview](README.md)

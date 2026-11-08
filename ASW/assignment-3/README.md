@@ -1,51 +1,65 @@
-# Assignment 3 — S3, CloudFront, HTTPS and DNS
+Assignment 3 — S3, CloudFront, HTTPS and DNS
+============================================
 
-[← THREADX overview](../README.md) · [← Assignment 2](../assignment-2/README.md)
+[AWS overview](../README.md) · [Previous: ALB and Auto Scaling](../assignment-2/README.md)
 
-## 1. What I built
+Overview
+--------
 
-For the third CoderCo assignment I hosted a **static THREADX clothing storefront** as objects in an S3 bucket, put CloudFront in front of it, connected my own subdomain through Route 53 and added HTTPS with ACM. I then replaced `index.html` and proved I could invalidate CloudFront's old cached response.
+I hosted the fictional THREADX storefront in S3, added CloudFront, connected `threadx.muhyadinelmi.com` through Route 53 and configured HTTPS with ACM. I then changed the website from black to metallic grey and used a CloudFront invalidation to check that the updated content reached the custom domain.
 
-This one challenged me more conceptually than I expected. I understood that an S3 bucket stores objects, but I kept mixing up the bucket name, its website endpoint, CloudFront's address, my custom subdomain and the DNS Alias. The build helped me finally separate those jobs.
+The HTML and imagery were generated with Codex. This assignment documents my AWS configuration, request checks and DNS/cache troubleshooting. It is a static educational storefront, with no checkout, payment service or application backend.
 
-The HTML storefront was generated separately with Codex; this README documents **my AWS hosting, configuration and troubleshooting**, not that I personally coded the HTML.
-
-## 2. The architecture I finished with
+Architecture
+------------
 
 ```mermaid
 flowchart TB
-  Visitor["Browser\nhttps://threadx.muhyadinelmi.com"]
-  CFProvider["Cloudflare parent DNS\nNS delegation for threadx"]
-  R53["Route 53 public hosted zone\nAlias A -> CloudFront"]
-  ACM["ACM in us-east-1\nDNS-validated TLS certificate"]
-  subgraph CDN["CloudFront | GLOBAL"]
-    Edge["Edge location\nGET / HEAD\nCachingOptimized"]
-  end
-  subgraph AWSLondon["S3 | eu-west-2 | outside VPC"]
-    Origin["S3 static website endpoint\nHTTP only | public read"]
-    Files["threadx-bucket-web\nindex.html / error.html"]
-  end
-  Visitor -. "DNS lookup" .-> CFProvider
-  CFProvider --> R53
-  R53 -. "CloudFront IPv4 addresses" .-> Visitor
-  Visitor -->|"HTTPS :443"| Edge
-  ACM -. "certificate" .-> Edge
-  Edge -->|"HTTP :80 on cache miss"| Origin
-  Origin --> Files
+    Browser["Browser<br/>threadx.muhyadinelmi.com"]
+    Resolver["Recursive DNS resolver"]
+    Parent["Cloudflare authoritative DNS<br/>muhyadinelmi.com"]
+    Zone["Route 53 public hosted zone<br/>threadx.muhyadinelmi.com"]
+    Certificate["ACM viewer certificate<br/>us-east-1"]
+    Edge["CloudFront | GLOBAL<br/>HTTPS, cache, GET / HEAD"]
+    subgraph London["Amazon S3 | eu-west-2 | outside the VPC"]
+        Origin["Public S3 website endpoint<br/>threadx-bucket-web"]
+        Objects["index.html<br/>error.html"]
+    end
+    Browser -. "DNS lookup" .-> Resolver
+    Resolver -. "Parent delegation lookup" .-> Parent
+    Parent -. "NS delegation for THREADX subdomain" .-> Zone
+    Zone -. "Alias A targets distribution" .-> Edge
+    Browser -->|"HTTPS :443"| Edge
+    Certificate -. "Viewer TLS" .-> Edge
+    Edge -->|"HTTP :80 on cache miss"| Origin
+    Origin --> Objects
 ```
 
-The order matters:
+Solid arrows show the content request; dashed arrows show DNS and certificate relationships. DNS locates CloudFront rather than carrying the HTML response. S3 and CloudFront are not resources inside my VPC.
 
-1. The browser resolves **`threadx.muhyadinelmi.com`** through the Cloudflare delegation and Route 53 Alias.
-2. The browser establishes **HTTPS with CloudFront**. The certificate lives in ACM `us-east-1`.
-3. CloudFront serves a cached object if it has a reusable copy.
-4. On a cache miss, CloudFront requests the content from the **S3 static website endpoint using HTTP**.
+Configuration and decisions
+---------------------------
 
-S3 and CloudFront are **not inside my VPC**. DNS finds CloudFront; it does not carry the web page back to the browser.
+| Setting | Recorded choice | Reason or boundary |
+|---|---|---|
+| S3 bucket | `threadx-bucket-web`, `eu-west-2` | Object storage in London |
+| Website documents | `index.html`, `error.html`, at bucket root | Homepage and configured error document |
+| Ownership and permissions | Bucket owner enforced; ACLs disabled; public-read bucket policy | Website objects readable through the public website endpoint |
+| CloudFront origin | `threadx-bucket-web.s3-website.eu-west-2.amazonaws.com` | Website endpoint, not the S3 REST endpoint |
+| Origin connection | HTTP only, port `80`; blank origin path | S3 website endpoints do not support HTTPS |
+| Viewer protocol | Redirect HTTP to HTTPS | TLS on the visitor-to-CloudFront connection |
+| Methods and cache | `GET`, `HEAD`; managed `CachingOptimized` | Read-only static content and caching |
+| Default root object | `index.html` | Homepage for `/` |
+| Custom hostname | `threadx.muhyadinelmi.com` | CloudFront alternate domain name and Route 53 Alias A |
+| Viewer certificate | DNS-validated ACM certificate in `us-east-1` | Required Region for CloudFront viewer certificates |
+| Edge additions | No WAF or response-headers policy selected in the creation review | No claim of WAF, security-header function or Lambda@Edge deployment |
 
-## 3. S3 bucket and static hosting
+The origin choice is a deliberate limitation of this lab: the S3 website is public and CloudFront fetches it over HTTP. Viewer HTTPS does not establish private-origin access or end-to-end TLS. A private S3 REST origin with Origin Access Control would be a different design; I did not implement it here.
 
-**Console:** S3 → Buckets → Create bucket → General purpose → `threadx-bucket-web`, Region `eu-west-2`. I used **Bucket owner enforced** for Object Ownership (ACLs disabled). For this assignment's public website endpoint, I turned off the bucket's public-access block and added a bucket policy that allowed public object reads:
+Implementation walkthrough
+--------------------------
+
+**1. Configure S3 hosting and object access.** I created the bucket in London, disabled the relevant bucket-level public-access block for this public website lab and added the object-read policy below. In Properties → Static website hosting, I selected `index.html` and `error.html`, then uploaded the files to the root.
 
 ```json
 {
@@ -62,105 +76,155 @@ S3 and CloudFront are **not inside my VPC**. DNS finds CloudFront; it does not c
 }
 ```
 
-I spent time on this because I knew JavaScript but wasn't used to reading IAM-style JSON policies. In this object, `Statement` is an array of rule objects; `Effect` is Allow, `Principal: "*"` means any principal, `Action` allows reading objects, and `Resource` specifies which object ARNs that action applies to. This policy **does not** grant public write or delete.
+`Principal: "*"` allows public reads of the bucket's objects. The policy does not grant public upload or delete permissions. I needed to learn the structure of the policy rather than treat the JSON as an unexplained block to paste: Statement is an array of rules, Effect selects Allow, Action defines the operation and Resource limits the affected object ARNs.
 
-**Console:** Bucket → Properties → Static website hosting → Enable → Host a static website. I set `index.html` as the home document and `error.html` as the error document, then uploaded both at the bucket root.
+<table>
+<tr>
+<td width="50%">
+<a href="screenshots/01-s3-public-read-policy.jpg"><img src="screenshots/01-s3-public-read-policy.jpg" width="360" alt="S3 policy editor with public GetObject permission for website objects"></a><br>
+<sub>Policy configuration: public s3:GetObject for this bucket; no public write grant.</sub>
+</td>
+<td width="50%">
+<a href="screenshots/02-s3-website-documents.jpg"><img src="screenshots/02-s3-website-documents.jpg" width="360" alt="Static website hosting form with index.html and error.html documents"></a><br>
+<sub>Website hosting selections: index.html and error.html at the bucket root.</sub>
+</td>
+</tr>
+</table>
 
-I checked the S3 website endpoint:
+The later object list shows `index.html` at 1.1 MB, replaced at 13:08:42 UTC, and `error.html` at bucket root. An earlier upload-success capture records both HTML files uploaded successfully; the original files were smaller. My initial browser check used the website endpoint:
 
 ```text
 http://threadx-bucket-web.s3-website.eu-west-2.amazonaws.com
 ```
 
-That address is an **HTTP website endpoint provided by AWS**, not another domain I registered. It proved that S3 could serve the files before I added CloudFront.
+The archive includes a browser view of the original product collection at that S3 endpoint. It is separate from the later custom-domain HTTPS check through CloudFront.
 
-## 4. CloudFront configuration
+<p>
+<a href="screenshots/08-s3-updated-object.jpg"><img src="screenshots/08-s3-updated-object.jpg" width="580" alt="S3 object list shows updated index.html at 1.1 MB and error.html"></a><br>
+<sub>Later upload: index.html replaced at 13:08:42 UTC; both HTML files at root.</sub>
+</p>
 
-**Console:** CloudFront → Distributions → Create distribution. I selected the **S3 website endpoint**, not the bucket's REST endpoint.
+**2. Create the CloudFront distribution.** I entered the website endpoint as the origin, left the origin path blank, chose `GET`/`HEAD`, the `CachingOptimized` policy and HTTP-to-HTTPS redirection, then set `index.html` as the default root object.
 
-| Setting | Choice | Why |
+<p>
+<a href="screenshots/03-cloudfront-creation-review.jpg"><img src="screenshots/03-cloudfront-creation-review.jpg" width="580" alt="CloudFront review with website endpoint, GET HEAD, cache policy and HTTPS redirect"></a><br>
+<sub>Creation review: website origin, GET/HEAD, CachingOptimized, HTTP-to-HTTPS redirect and no WAF.</sub>
+</p>
+
+This is the creation review, so it records selected settings rather than proving deployment by itself. The later `curl` headers establish that the custom-domain request was served by CloudFront. The retained response does not show `content-encoding`; I have not claimed a successful gzip or Brotli compression test.
+
+**3. Connect DNS and the certificate.** Cloudflare hosted the parent zone, `muhyadinelmi.com`. I delegated the THREADX subdomain to four Route 53 nameservers and changed its existing Alias A target from the earlier ALB to CloudFront. The edit view preserves the old ALB target in the record list while the CloudFront target is being selected.
+
+<p>
+<a href="screenshots/05-route53-cloudfront-alias.jpg"><img src="screenshots/05-route53-cloudfront-alias.jpg" width="580" alt="Route 53 Alias A edit replaces old ALB destination with CloudFront"></a><br>
+<sub>Alias change: old ALB target remains visible while CloudFront is selected.</sub>
+</p>
+
+I requested a new ACM viewer certificate in `us-east-1`, validated the hostname through its DNS CNAME and attached it to CloudFront. The earlier ALB certificate was in `eu-west-2` and could not serve that CloudFront viewer role. The certificate capture shows `Issued`, successful domain validation and `In use: Yes`. The original capture is in N. Virginia (`us-east-1`); the selected crop removes account chrome.
+
+<p>
+<a href="screenshots/04-acm-virginia-issued-in-use.jpg"><img src="screenshots/04-acm-virginia-issued-in-use.jpg" width="580" alt="ACM certificate issued with domain validation success and In use Yes"></a><br>
+<sub>CloudFront viewer certificate: Issued, domain validation Success and In use Yes; account ARN redacted.</sub>
+</p>
+
+Verification
+------------
+
+**CloudFront response.** I ran:
+
+```bash
+curl -I https://threadx.muhyadinelmi.com
+```
+
+The captured response included:
+
+```text
+HTTP/2 200
+content-type: text/html
+content-length: 1111835
+server: AmazonS3
+x-cache: Hit from cloudfront
+age: 146
+```
+
+<p>
+<a href="screenshots/07-cloudfront-cache-hit.jpg"><img src="screenshots/07-cloudfront-cache-hit.jpg" width="580" alt="HTTPS curl HEAD response with HTTP 200 CloudFront cache hit and age 146"></a><br>
+<sub>Captured HTTPS HEAD response: cache hit, CloudFront via header and age 146.</sub>
+</p>
+
+`x-cache: Hit from cloudfront`, `age: 146` and the CloudFront `via` header identify a cached response. `server: AmazonS3` alone would not prove CDN caching. This was a `HEAD` request: it checked response headers, not the complete page body.
+
+**Replace the object and invalidate the cache.** I kept the same S3 key, `index.html`, and uploaded the metallic-grey replacement. I then created an invalidation for `/*` in the distribution and waited for `Completed`. The wildcard covered this small site's cached paths, including `/` and `/index.html`.
+
+<table>
+<tr>
+<td width="50%">
+<a href="screenshots/09-invalidation-completed.jpg"><img src="screenshots/09-invalidation-completed.jpg" width="360" alt="CloudFront slash star invalidation status Completed"></a><br>
+<sub>Invalidation /* completed after the updated object upload.</sub>
+</td>
+<td width="50%">
+<a href="screenshots/10-updated-custom-domain.jpg"><img src="screenshots/10-updated-custom-domain.jpg" width="360" alt="Updated metallic grey THREADX storefront at its custom hostname"></a><br>
+<sub>Updated grey storefront at threadx.muhyadinelmi.com; personal browser tab text redacted.</sub>
+</td>
+</tr>
+</table>
+
+The invalidation capture and the updated page at the custom domain are complementary checks. `Completed` establishes the invalidation state; the visible grey storefront establishes the browser result. A direct S3 page would not be sufficient evidence of that CloudFront check. I did not capture a post-invalidation `Miss` header or a test from every edge location.
+
+| Check | Evidence | Conclusion |
 |---|---|---|
-| Origin | S3 website endpoint in London | Required for this public static-hosting lab |
-| CloudFront → origin protocol | HTTP only, port 80 | The S3 website endpoint does not support HTTPS |
-| Browser → CloudFront | Redirect HTTP to HTTPS | Visitors use a TLS-protected connection to CloudFront |
-| Allowed HTTP methods | GET, HEAD | Read website files and request headers |
-| Cache policy | Managed `CachingOptimized` | Cache repeat reads; Gzip/Brotli available |
-| Origin path | Blank | The HTML files are at the root of the bucket |
-| Default root object | `index.html` | Serve the homepage for `/` |
-| WAF | Not enabled | Outside the assignment scope, potential cost |
-| Alternate domain name | `threadx.muhyadinelmi.com` | Tell CloudFront to serve requests for my custom hostname |
-| Viewer TLS certificate | Issued in ACM `us-east-1` | CloudFront requires that Region |
+| Bucket policy and root objects | S3 policy and object-list captures | Captured configuration; object versions changed during the exercise |
+| Origin, methods, cache policy and redirect | CloudFront creation review | Captured setup choices; review screen is not a final settings audit |
+| Custom-domain HTTPS and caching | `curl -I`, HTTP `200`, CloudFront cache-hit and `via` headers | Captured HTTPS response and cache hit |
+| Invalidation | `/*`, status `Completed` | Captured invalidation result |
+| Updated content through custom hostname | Grey storefront with `threadx.muhyadinelmi.com` in the browser | Captured visual test |
+| DNS comparison | Terminal shows no A answer from the default resolver, four answers from Route 53, then four from Google DNS | Captured resolver comparison |
+| Custom error response, compression and HTTP redirect | Configured or selected; no dedicated response capture | Not independently verified |
 
-The most important thing I had to understand here: **HTTPS from the browser to CloudFront does not mean HTTPS from CloudFront to this S3 website endpoint.** The origin connection for this design is HTTP. In a different production design I would use a **private S3 REST origin + Origin Access Control**, but I didn't build that here.
+Troubleshooting
+---------------
 
-## 5. Route 53, Cloudflare and the Alias
-
-My parent domain `muhyadinelmi.com` is managed at Cloudflare. I delegated **only `threadx.muhyadinelmi.com`** to four Route 53 nameservers, rather than moving the whole domain.
-
-I had previously configured the Route 53 Alias A record to point at my Assignment 2 ALB. For this assignment I edited **that same Alias A record** so that its AWS target became the CloudFront distribution.
-
-This clicked when I stopped thinking of “Alias” as just a nickname: the Route 53 record gives the browser CloudFront IPv4 answers without me manually hard-coding addresses that AWS can change. The CloudFront distribution itself is **not** a DNS record; the Alias A record refers to it.
-
-I requested a **new ACM certificate in `us-east-1`**, validated the hostname through the DNS CNAME record and attached it to CloudFront. The earlier ALB certificate was issued in London, so it was not the certificate to select here.
-
-## 6. The DNS issue I troubleshot
-
-When I first opened the new HTTPS address, Safari said it couldn't find the server. Initially:
+**A resolver returned no A answer.** Safari initially could not find the server. My first checks were:
 
 ```bash
 dig +short NS threadx.muhyadinelmi.com
 dig +short A threadx.muhyadinelmi.com
 ```
 
-The NS lookup returned the expected Route 53 nameservers, but the A lookup returned nothing through my usual resolver. I then asked one AWS authoritative nameserver **directly**:
+The NS lookup returned the Route 53 nameservers, but the usual resolver returned no A answer. I compared it with a direct authoritative query:
 
 ```bash
 dig @ns-495.awsdns-61.com threadx.muhyadinelmi.com A +short
 ```
 
-That returned four IPv4 addresses. Later I queried Google DNS:
+That returned four IPv4 addresses. I later checked another recursive resolver and the local lookup:
 
 ```bash
 dig @8.8.8.8 +short threadx.muhyadinelmi.com A
 nslookup threadx.muhyadinelmi.com
 ```
 
-Google returned valid A answers and the custom website opened. My best explanation is **temporary recursive DNS caching/resolution delay**, not a proven bad record. I didn't need to delete and rebuild any working AWS resources.
+<p>
+<a href="screenshots/06-dns-resolver-comparison.jpg"><img src="screenshots/06-dns-resolver-comparison.jpg" width="580" alt="DNS terminal comparison of empty recursive A answer and successful authoritative and Google answers"></a><br>
+<sub>Default resolver: no A answer. Route 53 authority and Google DNS: four CloudFront IPv4 answers.</sub>
+</p>
 
-This was useful independent practice: an empty result from one resolver is not the same thing as a missing record on the authoritative nameserver.
+The terminal capture shows valid answers through Google DNS, followed by the working site and cache-hit captures. The `nslookup` check is retained in my notes, without a corresponding terminal capture. Temporary recursive caching or resolution delay is the likely explanation, not a proven root cause. I did not capture TTLs or resolver cache contents, so I would not describe this as a confirmed DNS propagation diagnosis.
 
-## 7. CloudFront caching and invalidation
+**An S3 update did not guarantee an updated cached response.** I had to separate the local file, the uploaded S3 object and the copy CloudFront could reuse. Changing the object updated the origin. Invalidation and the browser check addressed delivery through the CDN.
 
-I ran a header-only request:
+Lessons learned
+---------------
 
-```bash
-curl -I https://threadx.muhyadinelmi.com
-```
+I initially mixed up a bucket name, website endpoint, distribution hostname and Alias record. The useful distinction is now: S3 stores the files; DNS locates CloudFront; the viewer establishes TLS with CloudFront; CloudFront serves a cached response or fetches the website origin over HTTP.
 
-The response contained `HTTP/2 200`, `content-type: text/html`, `x-cache: Hit from cloudfront`, a CloudFront `via` header and `server: AmazonS3`. The cache hit and `age` value showed CloudFront was serving previously cached content.
+Comparing an authoritative DNS answer with recursive answers also gave me a better troubleshooting method. An empty answer from one resolver is a reason to investigate, not a reason to rebuild a working service. GET and HEAD are still HTTP methods over HTTPS; allowed methods and viewer protocol are separate settings. Replacing the local HTML also does not update S3 until I upload it, and object version history depends on bucket versioning.
 
-**Evidence — [open the curl / CloudFront cache-hit screenshot](screenshots/01-cloudfront-cache-hit.webp).** This is a real response from the custom HTTPS URL, not a diagram of what should happen.
+Lifecycle and references
+------------------------
 
-I then uploaded a **new version of the same `index.html` key** to S3, changing the storefront from the earlier dark design to a metallic-grey version. Uploading a replacement object changes S3, but a cached CloudFront copy may remain old.
+The earlier ALB was deleted and the subdomain was reused for this static deployment. The captures are a record of the lab, not a guarantee that the endpoint remains live. S3 storage, CloudFront traffic and Route 53 hosted-zone charges need checking separately.
 
-**Console:** CloudFront → Distribution → Invalidations → Create invalidation → `/*`. The wildcard covers both the homepage `/` and `/index.html` for this small lab. I waited for the invalidation status to show **Completed**.
+[AWS S3 website endpoints](https://docs.aws.amazon.com/AmazonS3/latest/userguide/WebsiteEndpoints.html) · [CloudFront certificate requirements](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/cnames-and-https-requirements.html) · [CloudFront invalidations](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/Invalidation.html)
 
-**Evidence — [open the completed invalidation screenshot](screenshots/02-invalidation-completed.webp).** “Completed” tells me the cache invalidation finished; it doesn't itself prove the HTML changed.
-
-Finally, I opened the updated website at **`threadx.muhyadinelmi.com`**, not just the direct S3 website endpoint.
-
-**Evidence — [open the final metallic-grey storefront screenshot](screenshots/03-updated-https-storefront.webp).** This ties the final visual check to the **custom domain** and the CloudFront delivery path.
-
-## 8. What I learned and what I still want to practise
-
-- **S3 object vs website:** Replacing `index.html` in S3 doesn't edit my local file; I must upload the changed object. Version history would depend on whether bucket versioning was enabled.
-- **S3 vs CloudFront:** S3 holds the current content; CloudFront can cache earlier responses and serve them again until expiry or invalidation.
-- **Alias A vs domain:** The subdomain is a hostname; the Alias A is the DNS record configuration that maps that hostname to an AWS resource.
-- **HTTPS vs methods:** GET and HEAD are still HTTP methods when the connection uses HTTPS. Viewer protocol policy is a separate setting from allowed methods.
-- **Cost/security caveat:** The S3 website endpoint is publicly readable over HTTP by design in this assignment. CloudFront adds HTTPS **for its viewers**, not private origin access.
-
-I got the site working, but the DNS terminology took repeated conversations. I want to keep revisiting the whole path until I can draw it from memory: Cloudflare NS delegation → Route 53 Alias → CloudFront viewer TLS/cache → S3 website origin.
-
-**Cleanup:** The earlier ALB was deleted. S3, CloudFront and Route 53 should be checked for continuing storage, requests, traffic and hosted-zone charges.
-
-[← THREADX overview](../README.md)
+[AWS overview](../README.md)
