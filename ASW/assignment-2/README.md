@@ -16,7 +16,7 @@ Serve two different EC2 web pages through one Application Load Balancer (ALB), w
 | Target group | `ThreadX-TargetGroup` using instance targets and HTTP port `80`; health checked at `/` |
 | Security groups | ALB accepted web traffic; App 2's HTTP `80` rule accepted the ALB security group as its source, rather than open internet HTTP |
 | DNS and HTTPS (bonus) | Route 53 Alias for `threadx.muhyadinelmi.com` and an ACM certificate in `eu-west-2` on the ALB HTTPS `443` listener |
-| Auto Scaling (bonus) | `ThreadX-ASG-Template` and `Grow-to-5-ThreadX`; saved cleanup state: desired `0`, min `0`, max `2` |
+| Auto Scaling (bonus) | `Grow-to-5-ThreadX` used `ThreadX-ASG-Template`. At creation, desired capacity was `1` and the group initially showed `0` instances while updating. A subsequent running EC2 instance explicitly listed `Grow-to-5-ThreadX` as its Auto Scaling Group. Later cleanup: desired `0`, min `0`, max `2` |
 
 The named EC2 applications ran in **public subnets**. Their HTTP security-group rules were intended to restrict web requests to the ALB; separate, restricted SSH access was used during troubleshooting. This is not a claim that the backends were in private subnets or that every possible route to the instances was eliminated.
 
@@ -42,7 +42,7 @@ echo "<h1>Welcome to THREADX Online Clothing Store - EC2 Application 2</h1>" > /
 
 <a href="screenshots/01-alb-three-healthy-targets.jpg"><img src="screenshots/01-alb-three-healthy-targets.jpg" alt="ALB target-group view with three healthy registered HTTP targets at the captured moment." width="520"></a>
 
-*ALB target-group view with three healthy registered HTTP targets at the captured moment.*
+*Three healthy registered HTTP targets were visible after the ASG launched additional EC2 capacity. This view confirms target health, not a CPU- or traffic-triggered scale-out event.*
 
 <a href="screenshots/09-curl-backend-responses.jpg"><img src="screenshots/09-curl-backend-responses.jpg" alt="Repeated curl requests returned both App 1 and App 2 HTML responses through the ALB." width="520"></a>
 
@@ -58,7 +58,7 @@ echo "<h1>Welcome to THREADX Online Clothing Store - EC2 Application 2</h1>" > /
 
 <a href="screenshots/03-asg-capacity-and-template.jpg"><img src="screenshots/03-asg-capacity-and-template.jpg" alt="Auto Scaling Group linked to the launch template; captured cleanup state shows desired capacity zero." width="520"></a>
 
-*Auto Scaling Group linked to the launch template; captured cleanup state shows desired capacity zero.*
+*ASG linked to the launch template. This particular screenshot shows the later cleanup state (desired capacity zero); earlier workshop captures show the group creating an EC2 instance at desired capacity one.*
 
 <a href="screenshots/02-nginx-service-recovery.jpg"><img src="screenshots/02-nginx-service-recovery.jpg" alt="App 1 NGINX service was inactive; the terminal shows the systemctl enable --now recovery command." width="520"></a>
 
@@ -73,6 +73,8 @@ echo "<h1>Welcome to THREADX Online Clothing Store - EC2 Application 2</h1>" > /
 
 ## What I verified
 
-Repeated requests to the ALB returned different App 1/App 2 identifiers. The target-group view showed healthy targets, and a browser reached the custom HTTPS hostname. The ASG configuration was captured, but **CPU-triggered scaling, instance replacement and an Availability Zone outage were not tested**. The ASG name includes “5”; this does not prove five instances ran.
+Repeated requests to the ALB returned distinct App 1/App 2 identifiers, three registered targets showed healthy, and the custom HTTPS hostname served the application. **Auto Scaling was also demonstrated beyond configuration:** the group was created at desired capacity `1`, initially showed `0` instances while updating, and a subsequent running EC2 instance identified `Grow-to-5-ThreadX` as its Auto Scaling Group. This demonstrates **automatic instance provisioning to meet desired capacity**. A later screenshot shows the group scaled down to desired `0` for cleanup.
+
+**Scope of the bonus test:** The captures do not establish a scaling policy increasing desired capacity because CPU or traffic rose. They also do not show a deliberate AZ outage or instance replacement test. Those additional tests were not required by the assignment; the ASG provisioning result was real.
 
 [Next: S3, CloudFront and Route 53 →](../assignment-3/README.md)
