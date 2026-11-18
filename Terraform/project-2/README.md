@@ -140,12 +140,6 @@ After adding the `public_ipv4` variable to the EC2 module, I initially left it o
 
 [Missing-argument error and fix](screenshots/troubleshoot-missing-variable.webp).
 
-### EC2 replacement in a later plan
-
-A later `terraform plan` showed `associate_public_ip_address` changing from `false` to `true`, which **forced EC2 replacement**. I reviewed the proposed change rather than treating it as a normal in-place update. The screenshot records the replacement **plan**, not another completed apply; the current `terraform.tfvars` contains the newer `true` value.
-
-[EC2 replacement plan](screenshots/plan-public-ip-replacement.webp).
-
 ## Cleanup and result
 
 Once the site, HTTP response and AWS configuration were captured, I ran `terraform destroy`. The command completed successfully:
