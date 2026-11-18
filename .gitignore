@@ -1,0 +1,13 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+
+# Private keys
+*.pem
+
+# Environment files
+.env
+
+# macOS
+.DS_Store

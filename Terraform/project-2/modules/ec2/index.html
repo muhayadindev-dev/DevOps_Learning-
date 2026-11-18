@@ -1,0 +1,349 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Terraform Project 2 | Muhyadin Elmi</title>
+
+  <style>
+    :root {
+      --navy:#18365f;
+      --blue:#2860b6;
+      --grey:#607187;
+      --line:#dae4f1;
+      --pale:#f4f8fd;
+    }
+
+    * { box-sizing:border-box; }
+
+    body {
+      margin:0;
+      font:16px/1.6 Arial,Helvetica,sans-serif;
+      color:#25364b;
+      background:#fff;
+    }
+
+    .wrap {
+      width:min(960px,92%);
+      margin:auto;
+    }
+
+    header {
+      border-bottom:1px solid var(--line);
+    }
+
+    nav {
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      padding:18px 0;
+      gap:16px;
+    }
+
+    .brand {
+      font-weight:800;
+      color:var(--navy);
+    }
+
+    nav a {
+      color:var(--blue);
+      text-decoration:none;
+      font-size:14px;
+      font-weight:700;
+    }
+
+    .hero {
+      background:linear-gradient(120deg,#eaf3ff,#fff);
+      padding:72px 0;
+      border-bottom:1px solid var(--line);
+    }
+
+    .eyebrow {
+      color:var(--blue);
+      font-weight:800;
+      font-size:12px;
+      letter-spacing:2px;
+      text-transform:uppercase;
+    }
+
+    h1 {
+      color:var(--navy);
+      font-size:clamp(40px,7vw,68px);
+      letter-spacing:-2px;
+      line-height:1.1;
+      margin:15px 0;
+    }
+
+    .hero p {
+      max-width:650px;
+      font-size:18px;
+      color:#52677f;
+      margin:0;
+    }
+
+    .tag {
+      display:inline-block;
+      margin-top:24px;
+      padding:9px 14px;
+      border-radius:6px;
+      background:var(--blue);
+      color:white;
+      font-size:13px;
+      font-weight:700;
+    }
+
+    section {
+      padding:58px 0 0;
+    }
+
+    h2 {
+      color:var(--navy);
+      font-size:28px;
+      line-height:1.25;
+      margin:0 0 12px;
+    }
+
+    .intro {
+      color:var(--grey);
+      margin:0 0 24px;
+    }
+
+    .grid {
+      display:grid;
+      grid-template-columns:repeat(4,1fr);
+      gap:14px;
+    }
+
+    .card {
+      background:var(--pale);
+      border:1px solid var(--line);
+      border-radius:9px;
+      padding:20px;
+    }
+
+    .card small {
+      color:var(--blue);
+      font-size:11px;
+      font-weight:800;
+      letter-spacing:1px;
+    }
+
+    .card h3 {
+      font-size:17px;
+      color:var(--navy);
+      margin:8px 0;
+    }
+
+    .card p {
+      font-size:14px;
+      color:var(--grey);
+      margin:0;
+    }
+
+    .details {
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:18px;
+    }
+
+    .panel {
+      border:1px solid var(--line);
+      border-radius:9px;
+      padding:23px;
+    }
+
+    .panel h3 {
+      color:var(--navy);
+      margin:0 0 12px;
+    }
+
+    ul {
+      padding-left:20px;
+      margin:0;
+    }
+
+    li {
+      padding:4px 0;
+    }
+
+    pre {
+      background:#18365f;
+      color:#e5f1ff;
+      padding:18px;
+      border-radius:7px;
+      overflow:auto;
+      font:13px/1.7 monospace;
+      margin:0;
+    }
+
+    footer {
+      margin-top:70px;
+      padding:25px 0;
+      border-top:1px solid var(--line);
+      color:var(--grey);
+      font-size:13px;
+    }
+
+    @media(max-width:750px) {
+      .grid {
+        grid-template-columns:repeat(2,1fr);
+      }
+
+      .details {
+        grid-template-columns:1fr;
+      }
+    }
+
+    @media(max-width:420px) {
+      .grid {
+        grid-template-columns:1fr;
+      }
+
+      .hero {
+        padding:50px 0;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <header>
+    <nav class="wrap">
+      <div class="brand">ME / DEVOPS</div>
+      <a href="#project">View the project</a>
+    </nav>
+  </header>
+
+  <main>
+
+    <div class="hero">
+      <div class="wrap">
+
+        <div class="eyebrow">
+          Infrastructure as Code · AWS
+        </div>
+
+        <h1>Terraform Project 2</h1>
+
+        <p>
+          An automated EC2 web-server deployment using
+          Terraform, Ubuntu, cloud-init and Apache2.
+          Built to demonstrate infrastructure provisioning
+          and first-boot configuration.
+        </p>
+
+        <span class="tag">
+          CoderCo · Terraform Assignment 2
+        </span>
+
+      </div>
+    </div>
+
+    <section class="wrap" id="project">
+
+      <h2>Technology Stack</h2>
+
+      <p class="intro">
+        Four components working together to deliver
+        a website on AWS.
+      </p>
+
+      <div class="grid">
+
+        <div class="card">
+          <small>01 / DEFINE</small>
+          <h3>Terraform</h3>
+          <p>
+            Defines AWS infrastructure in
+            reusable modules.
+          </p>
+        </div>
+
+        <div class="card">
+          <small>02 / PROVISION</small>
+          <h3>Amazon EC2</h3>
+          <p>
+            Runs the Ubuntu 26.04 LTS
+            virtual machine.
+          </p>
+        </div>
+
+        <div class="card">
+          <small>03 / CONFIGURE</small>
+          <h3>Cloud-init</h3>
+          <p>
+            Installs and configures software
+            at first boot.
+          </p>
+        </div>
+
+        <div class="card">
+          <small>04 / SERVE</small>
+          <h3>Apache2</h3>
+          <p>
+            Serves the custom HTML page
+            over HTTP.
+          </p>
+        </div>
+
+      </div>
+    </section>
+
+    <section class="wrap">
+
+      <h2>What the Project Includes</h2>
+
+      <p class="intro">
+        The important part is how the infrastructure
+        is created and configured automatically.
+      </p>
+
+      <div class="details">
+
+        <div class="panel">
+
+          <h3>Infrastructure and Configuration</h3>
+
+          <ul>
+            <li>Terraform EC2 and security-group modules</li>
+            <li>HTTP access through the security group</li>
+            <li>Ubuntu server with a public IPv4 address</li>
+            <li>Cloud-init YAML to install and enable Apache2</li>
+            <li>Custom index.html for the website</li>
+            <li>Terraform variables and outputs</li>
+          </ul>
+
+        </div>
+
+        <div class="panel">
+
+          <h3>Project Files</h3>
+
+          <pre>terraform/
+  main.tf
+  variables.tf
+  outputs.tf
+  modules/
+    ec2/
+      main.tf
+      cloud_init.yml
+      index.html
+    security_groups/</pre>
+
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <footer>
+    <div class="wrap">
+      © 2026 Muhyadin Elmi · Terraform Project 2
+    </div>
+  </footer>
+
+</body>
+</html>

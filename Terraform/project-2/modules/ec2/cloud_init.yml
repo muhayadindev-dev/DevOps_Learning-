@@ -1,0 +1,17 @@
+#cloud-config
+
+package_update: true 
+
+packages:
+  - apache2
+
+write_files:
+  - path: /var/www/html/index.html
+    encoding: b64
+    content: ${html_content}
+    
+runcmd:
+
+  - systemctl start apache2
+  - systemctl enable apache2
+  

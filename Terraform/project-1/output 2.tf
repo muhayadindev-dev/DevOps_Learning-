@@ -1,0 +1,1 @@
+id = aws_security_group.wordpress_sg.id
